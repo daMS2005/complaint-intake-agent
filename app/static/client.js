@@ -56,6 +56,28 @@ export async function api(path, options = {}) {
   return r.json();
 }
 
+// Documents go up as the raw file body and come back through the API, so access is checked on every read.
+export async function upload(caseId, file) {
+  const r = await fetch(`/api/my/cases/${encodeURIComponent(caseId)}/files?name=${encodeURIComponent(file.name)}`,
+    { method: "POST", body: file, headers: { "Content-Type": file.type, Authorization: "Bearer " + (await token()) } });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "The document wasn't uploaded. Try again.");
+  return r.json();
+}
+
+export async function download(caseId, index, name) {
+  const r = await fetch(`/api/cases/${encodeURIComponent(caseId)}/files/${index}`, { headers: { Authorization: "Bearer " + (await token()) } });
+  if (!r.ok) throw new Error("download failed");
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(await r.blob()), download: name });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+export const docs = c => (c.files?.length ? `<div class="docs">${c.files.map((f, i) =>
+  `<button type="button" class="link" data-doc="${i}" data-case="${esc(c.id)}" data-name="${esc(f.name)}">${esc(f.name)}</button>`).join("")}</div>` : "");
+
+export function wireDownloads(root) {
+  root.querySelectorAll("[data-doc]").forEach(b => (b.onclick = () => download(b.dataset.case, b.dataset.doc, b.dataset.name)));
+}
+
 export const me = async () => ((await token()) ? api("/api/me") : null);
 export const home = user => (user.role === "staff" ? "/desk" : "/app");
 
@@ -86,9 +108,9 @@ export async function header(requiredRole) {
 // Which side of the runtime check this deployment is on: Google Cloud, or the local open-source stack.
 export async function runtime() {
   const h = await (await fetch("/health")).json();
-  const el = document.createElement("span");
-  el.className = "runtime";
-  el.textContent = h.backend === "gcp" ? "Running on Google Cloud" : "Running locally";
+  const el = document.createElement("a");
+  el.className = "runtime"; el.href = "/status";
+  el.textContent = h.backend === "gcp" ? "Running on Google Cloud" : "Running on the local stack";
   el.title = `Model: ${h.model}\nEmbeddings: ${h.embeddings}\nSign-in: ${h.auth}\nStorage: ${h.store}\nEvents: ${h.events}`;
   document.querySelector("header").append(el);
 }

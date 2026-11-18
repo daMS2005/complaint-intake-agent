@@ -97,6 +97,10 @@ resource "google_cloud_run_v2_service" "app" {
         value = google_pubsub_topic.events.id
       }
       env {
+        name  = "EVIDENCE_BUCKET"
+        value = google_storage_bucket.evidence.name
+      }
+      env {
         name  = "WEB_API_KEY" # public browser key, restricted to the sign-in APIs
         value = google_apikeys_key.web.key_string
       }

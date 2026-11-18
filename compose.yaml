@@ -1,0 +1,32 @@
+# The local open-source stack in one command: `docker compose up`, then open http://localhost:8080.
+# No Google Cloud account, credentials or billing; the app's runtime check falls back to these services.
+services:
+  ollama:
+    image: ollama/ollama:0.40.16
+    volumes: [ollama:/root/.ollama]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      retries: 30
+
+  models: # pulls the two open models once, then exits
+    image: ollama/ollama:0.40.16
+    environment: [OLLAMA_HOST=ollama:11434]
+    entrypoint: ["sh", "-c", "ollama pull qwen3:4b-instruct && ollama pull embeddinggemma"]
+    depends_on:
+      ollama: { condition: service_healthy }
+
+  app:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      - FORCE_LOCAL=1
+      - OLLAMA_API_BASE=http://ollama:11434
+      - DATA_DIR=/srv/data
+    volumes: [data:/srv/data]
+    depends_on:
+      models: { condition: service_completed_successfully }
+
+volumes:
+  ollama:
+  data:

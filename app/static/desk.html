@@ -21,7 +21,7 @@
   #detail { border-left: 1px solid var(--line); padding: 0 0 0 28px; align-self: start; position: sticky; top: 16px; display: grid; gap: 16px; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
   dt { color: var(--muted); } dd { margin: 0; }
-  .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   #saved { font-size: 14px; color: var(--green); min-height: 1.4em; margin: 0; }
   @media (max-width: 640px) { main { padding: 16px; } .bar, .table { padding-right: 0; } th:nth-child(3), td:nth-child(3) { display: none; } }
 </style>
@@ -48,7 +48,7 @@
   </aside>
 </main>
 <script type="module">
-  import { STATUS, api, clock, day, esc, header, status } from "/static/client.js";
+  import { STATUS, api, clock, day, docs, esc, header, status, wireDownloads } from "/static/client.js";
   await header("staff");
   let cases = [], selected = null;
   const URGENCY = { high: "High", medium: "Medium", low: "Low" };
@@ -79,7 +79,8 @@
 
   function detail() {
     const c = cases.find(x => x.id === selected); if (!c) return;
-    const kind = { reply: "Reply to customer", note: "Internal note", status: "Update" };
+    const kind = { reply: "Reply to customer", note: "Internal note", status: "Update", triage: "Triage changed", file: "Document" };
+    const ai = c.triage ? `${URGENCY[c.triage.urgency] ?? esc(c.triage.urgency)} urgency, ${esc(c.triage.regulations.join(", ") || "no rules")}, by ${esc(c.triage.model)}` : "Not recorded";
     document.getElementById("detail").innerHTML = `
       <div><h2>${esc(c.issue)}</h2>${clock(c)}</div>
       <dl>
@@ -88,24 +89,34 @@
         <dt>Opened</dt><dd>${day(c.created)}</dd>
         <dt>Urgency</dt><dd class="${c.urgency === "high" ? "urgency-high" : ""}">${URGENCY[c.urgency] ?? esc(c.urgency)}</dd>
         <dt>Rules</dt><dd>${esc(c.regulations.join(", ") || "None flagged")}</dd>
+        <dt>AI triage</dt><dd>${ai}</dd>
         <dt>Status</dt><dd>${status(c.status)}</dd>
       </dl>
       <p style="margin:0">${esc(c.summary)}</p>
+      ${docs(c)}
       <ol class="timeline">${c.timeline.map(e => `<li class="${esc(e.kind)}"><small>${day(e.at)}, ${kind[e.kind] ?? "Update"}</small>${esc(e.text)}</li>`).join("")}</ol>
       <form id="work" style="display:grid;gap:12px">
         <label>Reply to customer <span class="hint">They see this in their account.</span><textarea id="reply" maxlength="2000"></textarea></label>
         <label>Internal note <span class="hint">Only staff see this.</span><textarea id="note" maxlength="2000"></textarea></label>
+        <div class="pair">
+          <label>Urgency <select id="urg">${Object.entries(URGENCY).map(([v, t]) => `<option value="${v}" ${v === c.urgency ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+          <label>Rules <input id="rules" value="${esc(c.regulations.join(", "))}" aria-describedby="rules-hint"></label>
+        </div>
+        <span class="hint" id="rules-hint">Overriding the AI triage is logged. Adding or removing Reg E changes the deadline.</span>
         <label>Status <select id="st">${Object.entries(STATUS).map(([v, t]) => `<option value="${v}" ${v === c.status ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <button class="primary">Save changes</button>
         <p id="saved" role="status"></p>
       </form>`;
+    wireDownloads(document.getElementById("detail"));
     document.getElementById("work").onsubmit = async e => {
       e.preventDefault();
       const v = id => document.getElementById(id).value.trim() || null;
-      const body = { status: v("st"), reply: v("reply"), note: v("note") };
+      const rules = document.getElementById("rules").value.split(",").map(r => r.trim()).filter(Boolean);
+      const body = { status: v("st"), reply: v("reply"), note: v("note"), urgency: v("urg"),
+                     regulations: rules.join() === c.regulations.join() ? null : rules };
       const msg = document.getElementById("saved");
-      if (!body.reply && !body.note && body.status === c.status) {
-        msg.textContent = "Nothing to save yet. Write a reply or a note, or change the status."; return;
+      if (!body.reply && !body.note && body.status === c.status && body.urgency === c.urgency && !body.regulations) {
+        msg.textContent = "Nothing to save yet. Write a reply or a note, or change the status, urgency or rules."; return;
       }
       const button = e.submitter; button.disabled = true;
       try {

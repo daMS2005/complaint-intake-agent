@@ -3,6 +3,7 @@
 Each function below has a GCP branch and a local branch:
   sign-in     Identity Platform    | developer tokens ("dev:<uid>")
   documents   Firestore            | SQLite
+  files       Cloud Storage        | data/files/
   events      Pub/Sub              | data/events.jsonl
   embeddings  Vertex AI            | EmbeddingGemma on Ollama
   industry    BigQuery CFPB data   | bundled CFPB sample (app/data/cfpb_sample.csv.gz)
@@ -25,18 +26,30 @@ from google.oauth2 import id_token
 log = logging.getLogger(__name__)
 
 
+CHECK: dict = {}  # what the startup check found, shown on /status
+
+
 def vertex_enabled() -> tuple[bool, str | None]:
     """True when credentials resolve and aiplatform.googleapis.com is ENABLED on the project."""
+    import datetime
+    CHECK.update(checked_at=datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"), steps=[])
+    step = lambda name, ok, detail: CHECK["steps"].append({"name": name, "ok": ok, "detail": detail})
     if os.getenv("FORCE_LOCAL"):
+        step("FORCE_LOCAL", False, "Set, so the check is skipped and the local stack is used")
         return False, None
     try:
         creds, project = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         project = os.getenv("GOOGLE_CLOUD_PROJECT") or project
+        step("Google credentials", True, f"Found, project {project}")
         url = f"https://serviceusage.googleapis.com/v1/projects/{project}/services/aiplatform.googleapis.com"
         r = AuthorizedSession(creds).get(url, timeout=5)
-        return r.ok and r.json().get("state") == "ENABLED", project
+        state = r.json().get("state") if r.ok else f"HTTP {r.status_code}"
+        step("Vertex AI API (aiplatform.googleapis.com)", state == "ENABLED", state)
+        return state == "ENABLED", project
     except Exception as e:  # no credentials, no network, no permission: all mean "go local"
         log.warning("Vertex AI check failed, using local stack: %s", e)
+        step("Google credentials" if not CHECK["steps"] else "Vertex AI API (aiplatform.googleapis.com)", False,
+             type(e).__name__)
         return False, None
 
 
@@ -44,6 +57,7 @@ GCP, PROJECT = vertex_enabled()
 FIRESTORE_DB = os.getenv("FIRESTORE_DATABASE") if GCP else None
 TOPIC = os.getenv("EVENTS_TOPIC") if GCP else None  # projects/<p>/topics/<t>
 WEB_API_KEY = os.getenv("WEB_API_KEY") if GCP else None  # browser key for Identity Platform sign-in
+EVIDENCE_BUCKET = os.getenv("EVIDENCE_BUCKET") if GCP else None  # customer documents
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", "data"))
 CFPB_SAMPLE = pathlib.Path(__file__).parent / "data" / "cfpb_sample.csv.gz"
 
@@ -112,6 +126,27 @@ def find(collection: str, **equals) -> list[dict]:
         return [d.to_dict() for d in query.stream()]
     docs = [json.loads(r[0]) for r in _table(collection).execute(f"SELECT data FROM {collection}")]
     return [d for d in docs if all(d.get(k) == v for k, v in equals.items())]
+
+
+@functools.cache
+def _bucket():
+    from google.cloud import storage
+    return storage.Client(project=PROJECT).bucket(EVIDENCE_BUCKET)
+
+
+def put_file(path: str, data: bytes, content_type: str) -> None:
+    if EVIDENCE_BUCKET:
+        _bucket().blob(path).upload_from_string(data, content_type=content_type)
+    else:
+        target = DATA_DIR / "files" / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+
+def get_file(path: str) -> bytes:
+    if EVIDENCE_BUCKET:
+        return _bucket().blob(path).download_as_bytes()
+    return (DATA_DIR / "files" / path).read_bytes()
 
 
 @functools.cache

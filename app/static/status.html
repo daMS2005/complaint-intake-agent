@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System status – Northwind Resolve</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  main { max-width: 900px; margin: 0 auto; padding: 40px 24px; display: grid; gap: 32px; }
+  .verdict { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: center; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; grid-row: span 2; }
+  .gcp .dot { background: var(--green); } .local .dot { background: var(--red); }
+  .verdict h1 { margin: 0; font-size: 28px; max-width: none; }
+  .verdict p { margin: 0; color: var(--muted); }
+  ol.steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+  ol.steps li span { color: var(--muted); }
+  .pass { color: var(--green); font-weight: 600; } .fail { color: var(--red); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 14px; color: var(--muted); font-weight: 600; }
+  td.on { font-weight: 600; } td.off { color: var(--muted); }
+</style>
+</head>
+<body>
+<header><a class="brand" href="/">Northwind Resolve</a></header>
+<main>
+  <section class="verdict" id="verdict" aria-live="polite"><p>Checking…</p></section>
+  <section>
+    <h2>How it decided</h2>
+    <p class="muted small">When the service starts, it checks for Google credentials, then asks the Service Usage API whether
+      the Vertex AI API is enabled for the project. Any failure along the way means the local stack.</p>
+    <ol class="steps" id="steps"></ol>
+  </section>
+  <section>
+    <h2>What each side uses</h2>
+    <table>
+      <thead><tr><th scope="col">Part</th><th scope="col">Google Cloud</th><th scope="col">Local open-source stack</th></tr></thead>
+      <tbody id="stack"></tbody>
+    </table>
+  </section>
+</main>
+<script type="module">
+  import { esc, runtime } from "/static/client.js";
+  runtime();
+  const h = await (await fetch("/health")).json();
+  const gcp = h.backend === "gcp";
+  const v = document.getElementById("verdict");
+  v.className = "verdict " + h.backend;
+  v.innerHTML = `<span class="dot" aria-hidden="true"></span>
+    <h1>${gcp ? "Using Google Cloud" : "Using the local open-source stack"}</h1>
+    <p>${gcp ? "The Vertex AI API is enabled, so every part below runs on Google Cloud." : "Vertex AI isn't available here, so every part below runs on open-source software on this machine."}
+      Checked ${new Date(h.check.checked_at).toLocaleString()}.</p>`;
+  document.getElementById("steps").innerHTML = h.check.steps.map(s =>
+    `<li><span class="${s.ok ? "pass" : "fail"}">${s.ok ? "Passed" : "Failed"}</span>: ${esc(s.name)} <span>(${esc(s.detail)})</span></li>`).join("");
+  const rows = [
+    ["Language model (agents)", "Gemini 3.5 Flash on Vertex AI", "Qwen3 4B Instruct on Ollama"],
+    ["Embeddings (policy search)", "gemini-embedding-001 on Vertex AI", "EmbeddingGemma on Ollama"],
+    ["Sign-in", "Identity Platform", "Developer sign-in"],
+    ["Cases and users", "Firestore", "SQLite"],
+    ["Customer documents", "Cloud Storage", "Local folder"],
+    ["Case events and audit trail", "Pub/Sub, Cloud Function, BigQuery", "JSON lines file"],
+    ["Industry complaint data", "BigQuery CFPB dataset", "Bundled CFPB sample"],
+  ];
+  document.getElementById("stack").innerHTML = rows.map(([part, cloud, local]) =>
+    `<tr><td>${part}</td><td class="${gcp ? "on" : "off"}">${cloud}</td><td class="${gcp ? "off" : "on"}">${local}</td></tr>`).join("");
+</script>
+</body>
+</html>

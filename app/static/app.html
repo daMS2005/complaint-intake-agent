@@ -25,7 +25,7 @@
   </aside>
 </main>
 <script type="module">
-  import { api, chat, clock, day, esc, header, status } from "/static/client.js";
+  import { api, chat, clock, day, docs, esc, header, status, upload, wireDownloads } from "/static/client.js";
   await header("customer");
   let known = null;
   async function loadCases() {
@@ -39,8 +39,20 @@
           ${clock(c)}
         </div>
         <ol class="timeline">${c.timeline.map(e => `<li class="${esc(e.kind)}"><small>${day(e.at)}, ${e.kind === "reply" ? "Northwind replied" : "update"}</small>${esc(e.text)}</li>`).join("")}</ol>
+        ${docs(c)}
+        ${c.status === "resolved" ? "" : `<label class="small">Add a document <span class="hint">A statement, letter or screenshot. PDF, PNG or JPEG, up to 5 MB.</span>
+          <input type="file" accept="application/pdf,image/png,image/jpeg" data-upload="${esc(c.id)}"></label>
+          <p class="small muted" role="status" id="up-${esc(c.id)}"></p>`}
       </article>`).join("")
       : `<p class="muted">Nothing open. If something went wrong with an account, card or loan, describe it to the assistant and your case will show up here.</p>`;
+    wireDownloads(document.getElementById("cases"));
+    document.querySelectorAll("[data-upload]").forEach(input => (input.onchange = async () => {
+      const msg = document.getElementById("up-" + input.dataset.upload), file = input.files[0];
+      if (!file) return;
+      msg.textContent = `Uploading ${file.name}…`; input.disabled = true;
+      try { await upload(input.dataset.upload, file); await loadCases(); }
+      catch (e) { msg.textContent = e.message; input.disabled = false; }
+    }));
   }
   chat(document.getElementById("assistant"), {
     endpoint: "/api/chat",

@@ -7,10 +7,11 @@ import collections
 import datetime
 import pathlib
 import re
+import uuid
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -109,6 +110,47 @@ def my_cases(user: dict = Depends(current_user)) -> list[dict]:
     return [cases.customer_view(c) for c in cases.cases_of(user["uid"])]
 
 
+DOCUMENT_TYPES = {"application/pdf", "image/png", "image/jpeg"}
+
+
+@app.post("/api/my/cases/{case_id}/files")
+async def add_document(case_id: str, request: Request, name: str = Query(max_length=120),
+                       user: dict = Depends(current_user)) -> dict:
+    """A customer attaches evidence (a statement, a letter) to their own case. Raw body, so no multipart parser."""
+    case = backend.get("cases", case_id)
+    if not case or case["owner"] != user["uid"]:
+        raise HTTPException(404, "case not found")
+    content_type = request.headers.get("content-type", "")
+    if content_type not in DOCUMENT_TYPES:
+        raise HTTPException(415, "Upload a PDF, PNG or JPEG.")
+    if len(case.get("files", [])) >= 5:
+        raise HTTPException(409, "A case can have up to 5 documents.")
+    data = await request.body()
+    if not data or len(data) > 5_000_000:
+        raise HTTPException(413, "Documents can be up to 5 MB.")
+    safe = re.sub(r"[^\w.\- ]", "_", name).strip()[:80] or "document"
+    path = f"cases/{case_id}/{uuid.uuid4().hex[:8]}-{safe}"
+    backend.put_file(path, data, content_type)
+    case.setdefault("files", []).append({"name": safe, "path": path, "type": content_type, "size": len(data),
+                                         "at": cases.iso(cases.now())})
+    cases.add_entry(case, "file", f"Customer added {safe}", "customer")
+    backend.put("cases", case_id, case)
+    return cases.customer_view(case)
+
+
+@app.get("/api/cases/{case_id}/files/{index}")
+def get_document(case_id: str, index: int, user: dict = Depends(current_user)) -> Response:
+    case = backend.get("cases", case_id)
+    if not case or (user["role"] != "staff" and case["owner"] != user["uid"]):
+        raise HTTPException(404, "case not found")
+    files = case.get("files", [])
+    if not 0 <= index < len(files):
+        raise HTTPException(404, "document not found")
+    f = files[index]
+    return Response(backend.get_file(f["path"]), media_type=f["type"],
+                    headers={"Content-Disposition": f'attachment; filename="{f["name"]}"'})
+
+
 @app.post("/dialogflow/webhook")
 async def dialogflow_webhook(request: Request) -> dict:
     """Dialogflow CX channel. CX callers are not signed in, so each CX session is its own customer id."""
@@ -129,6 +171,8 @@ class CaseUpdate(BaseModel):
     status: Literal[cases.STATUSES] | None = None
     reply: str | None = Field(default=None, max_length=2000)
     note: str | None = Field(default=None, max_length=2000)
+    urgency: Literal["high", "medium", "low"] | None = None  # staff override of the AI triage
+    regulations: list[str] | None = Field(default=None, max_length=6)
 
 
 @app.patch("/api/cases/{case_id}")
@@ -140,6 +184,16 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(staff_user)
         cases.add_entry(case, "reply", redact(body.reply), "staff")
     if body.note:
         cases.add_entry(case, "note", redact(body.note), "staff")
+    suggested = case.get("triage", {})
+    if body.urgency and body.urgency != case["urgency"]:
+        cases.add_entry(case, "triage", f"Urgency changed from {case['urgency']} to {body.urgency} "
+                        f"(AI suggested {suggested.get('urgency', 'n/a')})", "staff")
+        case["urgency"] = body.urgency
+    if body.regulations is not None and body.regulations != case["regulations"]:
+        case["regulations"] = [r.strip()[:20] for r in body.regulations if r.strip()]
+        case["due"] = cases.iso(cases.deadline(datetime.datetime.fromisoformat(case["created"]), case["regulations"]))
+        cases.add_entry(case, "triage", f"Rules changed to {', '.join(case['regulations']) or 'none'}; deadline now "
+                        f"{case['due'][:10]} (AI suggested {', '.join(suggested.get('regulations', [])) or 'none'})", "staff")
     if body.status and body.status != case["status"]:
         case["status"] = body.status
         cases.add_entry(case, "status", f"Status changed to {body.status.replace('_', ' ')}", "staff")
@@ -177,6 +231,7 @@ def health() -> dict:
         "auth": "identity_platform" if backend.WEB_API_KEY else "dev",
         "store": f"firestore:{backend.FIRESTORE_DB}" if backend.FIRESTORE_DB else "sqlite",
         "events": "pubsub" if backend.TOPIC else "jsonl",
+        "check": backend.CHECK,
     }
 
 
@@ -184,5 +239,6 @@ def _page(name: str):
     return lambda: FileResponse(STATIC / name)
 
 
-for _path, _name in {"/": "index.html", "/app": "app.html", "/desk": "desk.html", "/insights": "insights.html"}.items():
+for _path, _name in {"/": "index.html", "/app": "app.html", "/desk": "desk.html", "/insights": "insights.html",
+                     "/status": "status.html"}.items():
     app.add_api_route(_path, _page(_name), methods=["GET"], include_in_schema=False)

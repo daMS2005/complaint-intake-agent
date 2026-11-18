@@ -73,3 +73,27 @@ def test_dialogflow_webhook_returns_fulfillment(monkeypatch):
     body = {"sessionInfo": {"session": "projects/p/locations/global/agents/a/sessions/abc"}, "text": "hi"}
     r = client.post("/dialogflow/webhook", json=body).json()
     assert r["fulfillmentResponse"]["messages"][0]["text"]["text"] == ["cx-abc:hi"]
+
+
+def test_staff_override_of_ai_triage_is_logged_recomputes_deadline_and_stays_internal():
+    case = cases.open_case("dave", "Checking or savings account", "Fee dispute", "Charged twice.", "low", [])
+    body = {"urgency": "high", "regulations": ["Reg E"]}
+    updated = client.patch(f"/api/cases/{case['id']}", json=body, headers=as_user("agent3", "staff")).json()
+    opened = datetime.datetime.fromisoformat(case["created"])
+    assert updated["urgency"] == "high" and updated["triage"]["urgency"] == "low"
+    assert updated["due"] == cases.iso(cases.add_business_days(opened, 10))
+    assert "AI suggested low" in updated["timeline"][-2]["text"]
+    seen = client.get("/api/my/cases", headers=as_user("dave")).json()[0]["timeline"]
+    assert [e["kind"] for e in seen] == ["status"]
+
+
+def test_customer_attaches_document_only_owner_and_staff_can_read_it():
+    case = cases.open_case("erin", "Mortgage", "Payment not credited", "Paid in full.", "high", ["RESPA"])
+    url = f"/api/my/cases/{case['id']}/files?name=statement.pdf"
+    pdf = {**as_user("erin"), "Content-Type": "application/pdf"}
+    assert client.post(url, content=b"%PDF-1.4 demo", headers=pdf).json()["files"][0]["name"] == "statement.pdf"
+    assert client.post(url, content=b"x", headers={**as_user("erin"), "Content-Type": "text/html"}).status_code == 415
+    assert client.post(url, content=b"x", headers={**as_user("mallory"), "Content-Type": "application/pdf"}).status_code == 404
+    get = f"/api/cases/{case['id']}/files/0"
+    assert client.get(get, headers=as_user("agent4", "staff")).content == b"%PDF-1.4 demo"
+    assert client.get(get, headers=as_user("mallory")).status_code == 404

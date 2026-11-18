@@ -40,6 +40,7 @@ def open_case(owner: str, product: str, issue: str, summary: str, urgency: str, 
         "created": iso(created), "due": iso(deadline(created, regulations)),
         "product": product, "issue": issue, "summary": summary,
         "urgency": urgency.lower(), "regulations": regulations, "status": "new",
+        "triage": {"model": backend.MODEL, "urgency": urgency.lower(), "regulations": regulations},
         "timeline": [{"at": iso(created), "kind": "status", "by": "assistant", "text": "Case opened"}],
     }
     backend.put("cases", case["id"], case)
@@ -48,14 +49,19 @@ def open_case(owner: str, product: str, issue: str, summary: str, urgency: str, 
     return case
 
 
+CUSTOMER_KINDS = ("status", "reply", "file")  # "note" and "triage" entries are staff-only
+
+
 def add_entry(case: dict, kind: str, text: str, by: str) -> None:
-    """kind: "reply" (customer sees it), "note" (staff only) or "status"."""
+    """kind: "reply", "status" and "file" are shown to the customer; "note" and "triage" are staff-only."""
     case["timeline"].append({"at": iso(now()), "kind": kind, "by": by, "text": text})
 
 
 def customer_view(case: dict) -> dict:
     fields = ("id", "created", "due", "product", "issue", "summary", "status")
-    return {k: case[k] for k in fields} | {"timeline": [e for e in case["timeline"] if e["kind"] != "note"]}
+    files = [{k: f[k] for k in ("name", "type", "size", "at")} for f in case.get("files", [])]
+    return {k: case[k] for k in fields} | {"files": files,
+                                           "timeline": [e for e in case["timeline"] if e["kind"] in CUSTOMER_KINDS]}
 
 
 def all_cases() -> list[dict]:
