@@ -111,6 +111,7 @@ export function chat(root, { endpoint, hello, suggestions, placeholder, label, o
     e.preventDefault();
     const text = input.value.trim(); if (!text || send.disabled) return;
     add("user", text); input.value = ""; send.disabled = true;
+    root.querySelector(".suggestions").hidden = true; // examples are for starting a conversation
     const pending = add("bot pending", "Working on it…");
     try {
       const { reply } = await api(endpoint, { method: "POST", body: JSON.stringify({ session_id: session, message: text }) });
