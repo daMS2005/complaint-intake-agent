@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northwind Resolve</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  main { max-width:1000px; margin:0 auto; padding:36px 16px; display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:32px; }
+  @media (max-width: 860px) { main { grid-template-columns:1fr; } }
+  .lead { color:var(--muted); font-size:16px; margin:0 0 24px; }
+  ol { padding:0; margin:0 0 24px; list-style:none; counter-reset:s; display:grid; gap:10px; }
+  ol li { counter-increment:s; display:grid; grid-template-columns:28px 1fr; gap:10px; }
+  ol li::before { content:counter(s); width:24px; height:24px; border-radius:50%; border:1px solid var(--line); display:grid; place-items:center; font-size:12px; color:var(--muted); }
+  ol li span { color:var(--muted); }
+  form { display:grid; gap:8px; } .row { display:flex; gap:8px; } .row button { flex:1; }
+  .or { text-align:center; color:var(--muted); font-size:12px; margin:10px 0; }
+  #err { color:var(--red); font-size:13px; min-height:1em; }
+</style>
+</head>
+<body>
+<header><a class="brand" href="/">Northwind Resolve</a></header>
+<main>
+  <section>
+    <h1>Complaint handling for a retail bank</h1>
+    <p class="lead">Customers tell an AI assistant what went wrong. Specialists resolve it before the legal deadline.
+      Managers see where complaints come from. Northwind Bank is fictional; the regulations and the industry data are real.</p>
+    <h2>How a complaint moves through it</h2>
+    <ol>
+      <li><div><b>The customer signs in and asks for help.</b> <span>The assistant answers policy questions, or files a case
+        with product, urgency and the rules that apply (Reg E, Reg Z, RESPA, FCRA, FDCPA).</span></div></li>
+      <li><div><b>The case lands in the Case Desk with its legal deadline.</b> <span>10 business days for Reg E errors,
+        15 days otherwise. Urgent cases alert the compliance team immediately.</span></div></li>
+      <li><div><b>A specialist works it.</b> <span>Internal notes, a reply to the customer, a status change. Every change
+        is an event other systems can react to.</span></div></li>
+      <li><div><b>The customer sees the outcome</b> <span>under My account, without calling in.</span></div></li>
+      <li><div><b>Managers watch the trends.</b> <span>Deadline risk, and an analyst agent that compares Northwind's cases
+        with complaints across the industry.</span></div></li>
+    </ol>
+    <p class="muted">Built on Google Cloud (ADK agents on Gemini, Dialogflow CX, Cloud Run, Firestore, Pub/Sub, BigQuery,
+      Identity Platform, Terraform) with a fallback to a local open-source stack.
+      <a href="https://github.com/daMS2005/complaint-intake-agent">Architecture and code</a>.</p>
+  </section>
+  <aside class="panel" id="signin">
+    <h2>Try it</h2>
+    <p class="muted">Each demo button creates a private throwaway account. You can switch between the customer and staff views at any time.</p>
+    <div class="row"><button class="primary" id="demo-customer">I'm a customer</button><button id="demo-staff">I'm bank staff</button></div>
+    <p class="or">or use an email account</p>
+    <form id="email">
+      <input type="email" id="em" placeholder="Email" required autocomplete="email">
+      <input type="password" id="pw" placeholder="Password (6+ characters)" required minlength="6" autocomplete="current-password">
+      <div class="row"><button>Sign in</button><button type="button" id="create">Create account</button></div>
+    </form>
+    <p id="err"></p>
+  </aside>
+</main>
+<script type="module">
+  import { badge, demoAccount, home, me, setRole, signIn } from "/static/client.js";
+  badge();
+  const err = m => (document.getElementById("err").textContent = m);
+  const go = async role => { const user = await me(); role && role !== user.role ? setRole(role) : (location.href = home(user)); };
+  const user = await me();
+  if (user) document.getElementById("signin").innerHTML = `<h2>Welcome back</h2><p class="muted">You're signed in as ${user.role}.</p>
+    <button class="primary" onclick="location.href='${home(user)}'">Continue</button>`;
+  document.getElementById("demo-customer")?.addEventListener("click", async () => { await demoAccount(); go("customer"); });
+  document.getElementById("demo-staff")?.addEventListener("click", async () => { await demoAccount(); go("staff"); });
+  const email = async create => {
+    const f = document.getElementById("email"); if (!f.reportValidity()) return;
+    try { await signIn(document.getElementById("em").value, document.getElementById("pw").value, create); go(); }
+    catch (e) { err(e.code ? e.code.replace("auth/", "").replaceAll("-", " ") : "Sign-in failed"); }
+  };
+  document.getElementById("email")?.addEventListener("submit", e => { e.preventDefault(); email(false); });
+  document.getElementById("create")?.addEventListener("click", () => email(true));
+</script>
+</body>
+</html>

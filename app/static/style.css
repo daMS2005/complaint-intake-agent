@@ -13,3 +13,22 @@ header nav a { color:var(--muted); } header nav a.on { color:var(--text); }
 .note { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 12px; color:var(--muted); font-size:13px; }
 button, select, input, textarea { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
 button.primary { background:var(--accent); color:#0d1117; border:0; font-weight:600; cursor:pointer; }
+header .who { font-size:13px; color:var(--muted); }
+h1 { font-size:26px; margin:0 0 8px; } h2 { font-size:16px; margin:0 0 10px; }
+.muted { color:var(--muted); font-size:13px; }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+.pill.new { color:var(--accent); border-color:var(--accent); } .pill.in_review { color:var(--amber); border-color:var(--amber); }
+.pill.resolved { color:var(--green); border-color:var(--green); } .pill.overdue { color:var(--red); border-color:var(--red); }
+.chat { display:flex; flex-direction:column; min-height:0; }
+.chat .log { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:8px 0; min-height:240px; }
+.msg { max-width:85%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; }
+.msg.user { align-self:flex-end; background:var(--accent); color:#0d1117; }
+.msg.bot { align-self:flex-start; background:var(--bg); border:1px solid var(--line); }
+.chips { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+.chips button { color:var(--muted); border-radius:999px; padding:4px 12px; font-size:13px; cursor:pointer; text-align:left; }
+.chat form { display:flex; gap:8px; } .chat form input { flex:1; min-width:0; }
+.timeline div { border-left:2px solid var(--line); padding:4px 0 8px 10px; font-size:13px; }
+.timeline div.reply { border-color:var(--accent); } .timeline div.note { border-color:var(--amber); }
+.tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
+.tile { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+.tile b { display:block; font-size:28px; font-weight:600; } .tile.alert b { color:var(--red); }

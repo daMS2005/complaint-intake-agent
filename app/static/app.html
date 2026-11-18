@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My account · Northwind Resolve</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0, 1fr) 380px; gap:16px; height:calc(100dvh - 60px); }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; height:auto; } }
+  #assistant { height:100%; min-height:420px; }
+  #cases { overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
+  .case { border:1px solid var(--line); border-radius:10px; padding:12px; display:grid; gap:6px; }
+</style>
+</head>
+<body>
+<header></header>
+<main>
+  <section class="panel" id="assistant"></section>
+  <aside class="panel">
+    <h2>My cases</h2>
+    <div id="cases"><p class="muted">Loading…</p></div>
+  </aside>
+</main>
+<script type="module">
+  import { api, chat, day, esc, header } from "/static/client.js";
+  await header("customer");
+  async function loadCases() {
+    const list = await api("/api/my/cases");
+    document.getElementById("cases").innerHTML = list.length ? list.map(c => `
+      <div class="case">
+        <div><b>${esc(c.issue)}</b> <span class="pill ${esc(c.status)}">${esc(c.status.replace("_", " "))}</span></div>
+        <div class="muted">${esc(c.id)} · ${esc(c.product)} · response by ${day(c.due)}</div>
+        <div class="timeline">${c.timeline.map(e => `<div class="${esc(e.kind)}"><span class="muted">${day(e.at)} · ${e.kind === "reply" ? "Northwind" : "Update"}</span><br>${esc(e.text)}</div>`).join("")}</div>
+      </div>`).join("") : `<p class="muted">No cases yet. If something went wrong, tell the assistant and it will open one here.</p>`;
+  }
+  chat(document.getElementById("assistant"), {
+    endpoint: "/api/chat",
+    hello: "Hi, I'm Northwind's assistant. I can answer questions about fees, disputes and your rights, report a problem for you, or check on your cases.",
+    placeholder: "Ask a question or describe the problem…",
+    chips: ["There are two debit card charges of $480 I never made, from yesterday", "Can you refund an overdraft fee?",
+            "How long do you have to investigate an unauthorized debit charge?", "Where do my cases stand?"],
+    onReply: loadCases,
+  });
+  loadCases();
+</script>
+</body>
+</html>
