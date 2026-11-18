@@ -22,8 +22,8 @@ provider "google" {
 
 resource "google_project_service" "apis" {
   for_each = toset([
-    "aiplatform", "artifactregistry", "cloudbuild", "cloudfunctions", "dialogflow", "eventarc",
-    "iamcredentials", "logging", "monitoring", "pubsub", "run", "serviceusage", "storage", "sts",
+    "aiplatform", "artifactregistry", "bigquery", "cloudbuild", "cloudfunctions", "dialogflow", "eventarc",
+    "firestore", "iamcredentials", "logging", "monitoring", "pubsub", "run", "serviceusage", "storage", "sts",
   ])
   service            = "${each.key}.googleapis.com"
   disable_on_destroy = false
@@ -36,17 +36,18 @@ resource "google_artifact_registry_repository" "images" {
   depends_on    = [google_project_service.apis]
 }
 
-# Case files and the escalation queue: the GCP side of the runtime switch.
-resource "google_storage_bucket" "cases" {
-  name                        = "${var.project_id}-complaint-cases"
-  location                    = var.region
-  uniform_bucket_level_access = true
-  public_access_prevention    = "enforced"
-  depends_on                  = [google_project_service.apis]
+# Cases and the case-event stream: the GCP side of the runtime switch.
+resource "google_firestore_database" "ops" {
+  name                    = "northwind-ops"
+  location_id             = var.region
+  type                    = "FIRESTORE_NATIVE"
+  delete_protection_state = "DELETE_PROTECTION_DISABLED"
+  deletion_policy         = "DELETE"
+  depends_on              = [google_project_service.apis]
 }
 
-resource "google_pubsub_topic" "escalations" {
-  name       = "complaint-escalations"
+resource "google_pubsub_topic" "events" {
+  name       = "case-events"
   depends_on = [google_project_service.apis]
 }
 
@@ -57,20 +58,16 @@ resource "google_service_account" "app" {
 }
 
 resource "google_project_iam_member" "app" {
-  for_each = toset(["roles/aiplatform.user", "roles/serviceusage.serviceUsageViewer"])
-  project  = var.project_id
-  role     = each.key
-  member   = google_service_account.app.member
-}
-
-resource "google_storage_bucket_iam_member" "app_cases" {
-  bucket = google_storage_bucket.cases.name
-  role   = "roles/storage.objectUser"
-  member = google_service_account.app.member
+  for_each = toset([
+    "roles/aiplatform.user", "roles/bigquery.jobUser", "roles/datastore.user", "roles/serviceusage.serviceUsageViewer",
+  ])
+  project = var.project_id
+  role    = each.key
+  member  = google_service_account.app.member
 }
 
 resource "google_pubsub_topic_iam_member" "app_publish" {
-  topic  = google_pubsub_topic.escalations.id
+  topic  = google_pubsub_topic.events.id
   role   = "roles/pubsub.publisher"
   member = google_service_account.app.member
 }
@@ -92,12 +89,12 @@ resource "google_cloud_run_v2_service" "app" {
         value = var.project_id
       }
       env {
-        name  = "CASES_BUCKET"
-        value = google_storage_bucket.cases.name
+        name  = "FIRESTORE_DATABASE"
+        value = google_firestore_database.ops.name
       }
       env {
-        name  = "ESCALATION_TOPIC"
-        value = google_pubsub_topic.escalations.id
+        name  = "EVENTS_TOPIC"
+        value = google_pubsub_topic.events.id
       }
     }
   }

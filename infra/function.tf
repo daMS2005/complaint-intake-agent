@@ -1,4 +1,4 @@
-# Pub/Sub -> Cloud Function (gen2) that turns each escalation into an ALERT log entry.
+# Pub/Sub -> Cloud Function (gen2) that logs every case event; escalations become ALERT entries.
 
 data "archive_file" "escalation" {
   type        = "zip"
@@ -61,7 +61,7 @@ resource "google_cloudfunctions2_function" "escalation" {
   event_trigger {
     trigger_region        = var.region
     event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
-    pubsub_topic          = google_pubsub_topic.escalations.id
+    pubsub_topic          = google_pubsub_topic.events.id
     retry_policy          = "RETRY_POLICY_RETRY"
     service_account_email = google_service_account.function.email
   }

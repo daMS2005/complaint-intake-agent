@@ -1,10 +1,23 @@
-"""Runtime check: route through GCP when the Vertex AI API is available, else a local open-source stack."""
+"""Runtime check: route through GCP when the Vertex AI API is available, else a local open-source stack.
+
+Each function below has a GCP branch and a local branch:
+  cases       Firestore            | SQLite
+  events      Pub/Sub              | data/events.jsonl
+  embeddings  Vertex AI            | EmbeddingGemma on Ollama
+  industry    BigQuery CFPB data   | bundled CFPB sample (app/data/cfpb_sample.csv.gz)
+"""
+import collections
+import csv
+import functools
+import gzip
 import json
 import logging
 import os
 import pathlib
+import sqlite3
 
 import google.auth
+import httpx
 from google.auth.transport.requests import AuthorizedSession
 
 log = logging.getLogger(__name__)
@@ -26,45 +39,111 @@ def vertex_enabled() -> tuple[bool, str | None]:
 
 
 GCP, PROJECT = vertex_enabled()
-BUCKET = os.getenv("CASES_BUCKET") if GCP else None
-TOPIC = os.getenv("ESCALATION_TOPIC") if GCP else None  # projects/<p>/topics/<t>
+FIRESTORE_DB = os.getenv("FIRESTORE_DATABASE") if GCP else None
+TOPIC = os.getenv("EVENTS_TOPIC") if GCP else None  # projects/<p>/topics/<t>
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", "data"))
+CFPB_SAMPLE = pathlib.Path(__file__).parent / "data" / "cfpb_sample.csv.gz"
 
 if GCP:  # ADK reads these to send Gemini calls through Vertex AI
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
     os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT
     os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
     MODEL = os.getenv("VERTEX_MODEL", "gemini-3.5-flash")
+    EMBED_MODEL = os.getenv("VERTEX_EMBED_MODEL", "gemini-embedding-001")
 else:
     MODEL = os.getenv("LOCAL_MODEL", "qwen3:4b-instruct")
+    EMBED_MODEL = os.getenv("LOCAL_EMBED_MODEL", "embeddinggemma")
+OLLAMA = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
 
-log.info("backend=%s model=%s bucket=%s topic=%s", "gcp" if GCP else "local", MODEL, BUCKET, TOPIC)
+log.info("backend=%s model=%s firestore=%s topic=%s", "gcp" if GCP else "local", MODEL, FIRESTORE_DB, TOPIC)
+
+
+@functools.cache
+def _cases():
+    if FIRESTORE_DB:
+        from google.cloud import firestore
+        return firestore.Client(project=PROJECT, database=FIRESTORE_DB).collection("cases")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(DATA_DIR / "cases.db", check_same_thread=False)
+    con.execute("CREATE TABLE IF NOT EXISTS cases (id TEXT PRIMARY KEY, created TEXT, data TEXT)")
+    return con
 
 
 def save_case(case: dict) -> None:
-    if BUCKET:
-        from google.cloud import storage
-        storage.Client().bucket(BUCKET).blob(f"cases/{case['id']}.json").upload_from_string(
-            json.dumps(case), content_type="application/json")
+    if FIRESTORE_DB:
+        _cases().document(case["id"]).set(case)
     else:
-        (DATA_DIR / "cases").mkdir(parents=True, exist_ok=True)
-        (DATA_DIR / "cases" / f"{case['id']}.json").write_text(json.dumps(case, indent=2))
+        _cases().execute("INSERT OR REPLACE INTO cases VALUES (?, ?, ?)", (case["id"], case["created"], json.dumps(case)))
+        _cases().commit()
 
 
 def load_case(case_id: str) -> dict | None:
-    if BUCKET:
-        from google.cloud import storage
-        blob = storage.Client().bucket(BUCKET).blob(f"cases/{case_id}.json")
-        return json.loads(blob.download_as_text()) if blob.exists() else None
-    path = DATA_DIR / "cases" / f"{case_id}.json"
-    return json.loads(path.read_text()) if path.exists() else None
+    if FIRESTORE_DB:
+        doc = _cases().document(case_id).get()
+        return doc.to_dict() if doc.exists else None
+    row = _cases().execute("SELECT data FROM cases WHERE id = ?", (case_id,)).fetchone()
+    return json.loads(row[0]) if row else None
 
 
-def escalate(case: dict) -> None:
+def list_cases(limit: int = 500) -> list[dict]:
+    """Newest first."""
+    if FIRESTORE_DB:
+        from google.cloud import firestore
+        query = _cases().order_by("created", direction=firestore.Query.DESCENDING).limit(limit)
+        return [d.to_dict() for d in query.stream()]
+    rows = _cases().execute("SELECT data FROM cases ORDER BY created DESC LIMIT ?", (limit,))
+    return [json.loads(r[0]) for r in rows]
+
+
+@functools.cache
+def _publisher():
+    from google.cloud import pubsub_v1
+    return pubsub_v1.PublisherClient()
+
+
+def publish(event: str, case: dict) -> None:
+    """Case events (filed, escalated, status_changed) for downstream consumers."""
     if TOPIC:
-        from google.cloud import pubsub_v1
-        pubsub_v1.PublisherClient().publish(TOPIC, json.dumps(case).encode()).result(timeout=10)
+        _publisher().publish(TOPIC, json.dumps(case).encode(), event=event).result(timeout=10)
     else:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(DATA_DIR / "escalations.jsonl", "a") as f:
-            f.write(json.dumps(case) + "\n")
+        with open(DATA_DIR / "events.jsonl", "a") as f:
+            f.write(json.dumps({"event": event, "case": case}) + "\n")
+
+
+def embed(texts: list[str]) -> list[list[float]]:
+    if GCP:
+        from google import genai
+        client = genai.Client(vertexai=True, project=PROJECT, location=os.getenv("EMBED_LOCATION", "us-central1"))
+        return [client.models.embed_content(model=EMBED_MODEL, contents=t).embeddings[0].values for t in texts]
+    r = httpx.post(f"{OLLAMA}/api/embed", json={"model": EMBED_MODEL, "input": texts}, timeout=120)
+    r.raise_for_status()
+    return r.json()["embeddings"]
+
+
+INDUSTRY_FIELDS = {"issue": "issue", "company": "company_name", "state": "state", "year": "year"}
+
+
+def industry_breakdown(product_keyword: str, field: str) -> dict:
+    """Top 10 counts of public CFPB complaints for products matching the keyword."""
+    if field not in INDUSTRY_FIELDS:
+        return {"error": f"field must be one of {list(INDUSTRY_FIELDS)}"}
+    if GCP:
+        from google.cloud import bigquery
+        col = "CAST(EXTRACT(YEAR FROM date_received) AS STRING)" if field == "year" else INDUSTRY_FIELDS[field]
+        sql = (f"SELECT {col} AS label, COUNT(*) AS n "
+               "FROM `bigquery-public-data.cfpb_complaints.complaint_database` "
+               "WHERE LOWER(product) LIKE @p GROUP BY label ORDER BY n DESC LIMIT 10")
+        config = bigquery.QueryJobConfig(maximum_bytes_billed=5 * 10**9, query_parameters=[
+            bigquery.ScalarQueryParameter("p", "STRING", f"%{product_keyword.lower()}%")])
+        rows = bigquery.Client(project=PROJECT).query(sql, job_config=config).result()
+        counts = [(r.label, r.n) for r in rows]
+        source = "BigQuery bigquery-public-data.cfpb_complaints (all complaints through Mar 2023)"
+    else:
+        with gzip.open(CFPB_SAMPLE, "rt") as f:
+            key = INDUSTRY_FIELDS[field]
+            counts = collections.Counter(
+                r["date_received"][:4] if field == "year" else r[key]
+                for r in csv.DictReader(f) if product_keyword.lower() in r["product"].lower()).most_common(10)
+        source = "Bundled CFPB sample (1,500 complaints per product, Nov 2025 - Oct 2026)"
+    return {"source": source, "top": [{"label": k, "complaints": n} for k, n in counts]}

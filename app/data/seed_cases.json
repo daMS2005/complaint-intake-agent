@@ -1,0 +1,213 @@
+[
+ {
+  "id": "C-SEED0001",
+  "product": "Checking or savings account",
+  "issue": "Unauthorized transaction",
+  "summary": "Customer reports three debit card purchases totaling $1,240 at an out-of-state retailer on a card they still hold.",
+  "urgency": "high",
+  "regulations": [
+   "Reg E"
+  ],
+  "status": "in_review",
+  "days_ago": 1,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0002",
+  "product": "Checking or savings account",
+  "issue": "Overdraft fee dispute",
+  "summary": "Charged two $35 overdraft fees on the same day although a payroll deposit posted that morning.",
+  "urgency": "medium",
+  "regulations": [
+   "Reg E"
+  ],
+  "status": "new",
+  "days_ago": 2,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0003",
+  "product": "Credit card",
+  "issue": "Billing dispute",
+  "summary": "Charged $389 for an airline ticket that was cancelled by the airline; merchant refund not received after 30 days.",
+  "urgency": "medium",
+  "regulations": [
+   "Reg Z"
+  ],
+  "status": "new",
+  "days_ago": 3,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0004",
+  "product": "Mortgage",
+  "issue": "Foreclosure after loan transfer",
+  "summary": "Servicing transferred in August; payments sent to the prior servicer were not credited and a foreclosure notice was issued.",
+  "urgency": "high",
+  "regulations": [
+   "RESPA",
+   "Reg X"
+  ],
+  "status": "in_review",
+  "days_ago": 4,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0005",
+  "product": "Debt collection",
+  "issue": "Collector contacting at work",
+  "summary": "Collection agency calls the customer at work three times a week about a personal loan paid off in March.",
+  "urgency": "medium",
+  "regulations": [
+   "FDCPA"
+  ],
+  "status": "new",
+  "days_ago": 5,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0006",
+  "product": "Credit reporting",
+  "issue": "Incorrect late payment reported",
+  "summary": "A 30-day late payment was reported for May even though autopay records show the payment was made on time.",
+  "urgency": "medium",
+  "regulations": [
+   "FCRA"
+  ],
+  "status": "resolved",
+  "days_ago": 8,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0007",
+  "product": "Credit card",
+  "issue": "Unauthorized transaction",
+  "summary": "Online subscription charges of $14.99 per month for six months that the customer never signed up for.",
+  "urgency": "low",
+  "regulations": [
+   "Reg Z"
+  ],
+  "status": "resolved",
+  "days_ago": 12,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0008",
+  "product": "Money transfer or virtual currency",
+  "issue": "Transfer sent to wrong recipient",
+  "summary": "A $2,500 Zelle payment went to a scammer posing as the bank's fraud department; customer asks for the money back.",
+  "urgency": "high",
+  "regulations": [
+   "Reg E"
+  ],
+  "status": "new",
+  "days_ago": 0,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0009",
+  "product": "Vehicle loan or lease",
+  "issue": "Repossession notice",
+  "summary": "Customer received a repossession notice while a payment deferral was being processed by phone.",
+  "urgency": "high",
+  "regulations": [
+   "UDAAP"
+  ],
+  "status": "in_review",
+  "days_ago": 6,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0010",
+  "product": "Personal or student loan",
+  "issue": "Payment not applied",
+  "summary": "An extra $400 principal payment was applied to future interest instead of principal.",
+  "urgency": "low",
+  "regulations": [
+   "TILA"
+  ],
+  "status": "new",
+  "days_ago": 9,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0011",
+  "product": "Checking or savings account",
+  "issue": "Account frozen",
+  "summary": "Account frozen for a fraud review for 9 days; customer cannot pay rent.",
+  "urgency": "high",
+  "regulations": [
+   "Reg E",
+   "UDAAP"
+  ],
+  "status": "resolved",
+  "days_ago": 15,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0012",
+  "product": "Credit card",
+  "issue": "Interest charged after payoff",
+  "summary": "Residual interest of $23 charged after the customer paid the statement balance in full.",
+  "urgency": "low",
+  "regulations": [
+   "Reg Z"
+  ],
+  "status": "resolved",
+  "days_ago": 20,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0013",
+  "product": "Mortgage",
+  "issue": "Escrow shortage",
+  "summary": "Monthly payment rose $310 after an escrow analysis the customer believes double-counted the tax bill.",
+  "urgency": "medium",
+  "regulations": [
+   "RESPA"
+  ],
+  "status": "new",
+  "days_ago": 7,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0014",
+  "product": "Credit reporting",
+  "issue": "Identity theft account",
+  "summary": "A credit card the customer never opened appears on their credit report with a $3,100 balance.",
+  "urgency": "high",
+  "regulations": [
+   "FCRA"
+  ],
+  "status": "in_review",
+  "days_ago": 10,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0015",
+  "product": "Checking or savings account",
+  "issue": "Mobile deposit hold",
+  "summary": "A $1,800 mobile check deposit has been on hold for 8 business days without explanation.",
+  "urgency": "medium",
+  "regulations": [
+   "Reg CC"
+  ],
+  "status": "new",
+  "days_ago": 3,
+  "notes": []
+ },
+ {
+  "id": "C-SEED0016",
+  "product": "Debt collection",
+  "issue": "Debt not owed",
+  "summary": "Customer is being collected on for a medical bill that insurance already paid.",
+  "urgency": "medium",
+  "regulations": [
+   "FDCPA",
+   "FCRA"
+  ],
+  "status": "resolved",
+  "days_ago": 25,
+  "notes": []
+ }
+]

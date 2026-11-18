@@ -4,3 +4,5 @@ fastapi==0.163.2
 uvicorn==0.54.0
 google-cloud-storage==3.17.1
 google-cloud-pubsub==2.44.0
+google-cloud-firestore==2.34.1
+google-cloud-bigquery==3.47.0
