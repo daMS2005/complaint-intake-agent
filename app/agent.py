@@ -133,8 +133,9 @@ policy_agent = Agent(
     model=_model(),
     description="Answers questions about Northwind fees, card and billing disputes, mortgages, credit "
                 "reporting, debt collection and how complaints are handled.",
-    instruction="""Answer the customer's question using search_policies. Base the answer only on the policy text
-returned, mention which policy it comes from, and say so if the policies do not cover it.
+    instruction="""Answer the customer's question using search_policies, passing the question in the customer's own words.
+Read every section returned and answer only from that text: quote the exact amounts, timeframes and deadlines it
+gives, and name the policy. Say the policies don't cover it only if none of the sections do.
 If the customer wants to report a problem, transfer to intake_agent.""",
     tools=[search_policies],
 )
