@@ -66,7 +66,9 @@ back to see the reply land in My account.
 At startup the service checks for Google credentials, then asks the Service Usage API whether the
 Vertex AI API is enabled for its project. If it is, every part of the app runs on Google Cloud (green).
 If not, every part runs on open-source software on the same machine (red), with no cloud account or
-billing. The live [status page](https://complaint-agent-1045201542246.us-central1.run.app/status) shows
+billing. In between, if Vertex AI isn't available but an `OPENAI_API_KEY` is set and accepted, only the
+model and embeddings use OpenAI and everything else stays local (amber). This is useful when the machine
+is too small for a local model. The live [status page](https://complaint-agent-1045201542246.us-central1.run.app/status) shows
 what the check found.
 
 ```mermaid
@@ -74,7 +76,9 @@ flowchart LR
     start([Service starts]) --> creds{Google credentials?}
     creds -- no --> red
     creds -- yes --> api{Vertex AI API<br/>enabled?}
-    api -- "no, 403 or timeout" --> red
+    api -- "no, 403 or timeout" --> key{OpenAI key<br/>accepted?}
+    key -- yes --> amber[OpenAI model and embeddings,<br/>everything else local]
+    key -- no --> red
     api -- yes --> green
 
     subgraph green [Google Cloud]
@@ -101,6 +105,8 @@ flowchart LR
 
     classDef ok fill:#e3efeb,stroke:#1d5b4f,color:#17202a
     classDef bad fill:#fdecea,stroke:#b42318,color:#17202a
+    classDef mid fill:#fdf3e1,stroke:#9a5b00,color:#17202a
+    class amber mid
     class green,g1,g2,g3,g4,g5,g6,g7 ok
     class red,r1,r2,r3,r4,r5,r6,r7 bad
 ```
@@ -174,7 +180,9 @@ docker compose up
 ```
 
 Open http://localhost:8080. Compose starts Ollama, pulls the two open models (about 3 GB, first run
-only) and starts the app on the local stack. Without Docker:
+only) and starts the app on the local stack. The default model needs about 4 GB of Docker memory.
+On a smaller machine, put an OpenAI key in an untracked `.env` file (`OPENAI_API_KEY=...`) and the app uses
+OpenAI for the model and embeddings instead. Without Docker:
 
 ```bash
 ollama pull qwen3:4b-instruct && ollama pull embeddinggemma
@@ -204,8 +212,8 @@ Tests: `.venv/bin/pip install pytest httpx && .venv/bin/python -m pytest -q`
 - **The BigQuery CFPB dataset ends in March 2023.** The bundled local sample is newer (Nov 2025 to
   Oct 2026) but smaller.
 - **Business-day deadlines skip weekends but not federal holidays.**
-- **The small local model is less reliable than Gemini** at handing a conversation to the right agent.
-  It sometimes needs a second message.
+- **The small local model is less reliable than Gemini or OpenAI** at handing a conversation to the right
+  agent. It sometimes needs a second message.
 - **Terraform state is local.** Production would keep it in a GCS backend.
 
 ## License
