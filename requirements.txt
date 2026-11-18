@@ -1,0 +1,6 @@
+google-adk==2.14.1
+litellm==1.110.0
+fastapi==0.163.2
+uvicorn==0.54.0
+google-cloud-storage==3.17.1
+google-cloud-pubsub==2.44.0

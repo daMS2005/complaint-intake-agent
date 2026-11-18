@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Complaint Intake Agent</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:24px 16px; display:flex; flex-direction:column; height:100dvh; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
+  #badge { font-size:13px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  #badge.gcp { color:var(--green); border-color:var(--green); }
+  #badge.local { color:var(--red); border-color:var(--red); }
+  #log { flex:1; overflow-y:auto; margin:16px 0; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:85%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; }
+  .user { align-self:flex-end; background:var(--accent); color:#0d1117; }
+  .bot { align-self:flex-start; background:var(--panel); border:1px solid var(--line); }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .chips button { background:none; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:4px 12px; cursor:pointer; font-size:13px; }
+  form { display:flex; gap:8px; }
+  input { flex:1; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:15px; }
+  form button { background:var(--accent); color:#0d1117; border:0; border-radius:8px; padding:0 18px; font-weight:600; cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Northwind Bank · Complaint intake</h1>
+    <span id="badge">checking backend…</span>
+  </header>
+  <div id="log"></div>
+  <div class="chips">
+    <button>There are two debit card charges of $480 I never made, from yesterday</button>
+    <button>A debt collector keeps calling me at work about a loan I already paid off</button>
+    <button>What's the status of case C-</button>
+  </div>
+  <form>
+    <input id="q" autocomplete="off" maxlength="2000" placeholder="Describe the problem…">
+    <button>Send</button>
+  </form>
+</main>
+<script>
+  const session = crypto.randomUUID(), log = document.getElementById("log"), q = document.getElementById("q");
+  const add = (cls, text) => { const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = text; log.append(d); log.scrollTop = log.scrollHeight; return d; };
+  fetch("/health").then(r => r.json()).then(h => {
+    const b = document.getElementById("badge");
+    b.className = h.backend;
+    b.textContent = (h.backend === "gcp" ? "● Vertex AI · " : "● Local · ") + h.model;
+    b.title = `storage: ${h.storage}\nescalation: ${h.escalation}`;
+  });
+  add("bot", "Hi, I can help you report a problem with an account, card or loan. What happened?");
+  document.querySelectorAll(".chips button").forEach(c => c.onclick = () => { q.value = c.textContent; q.focus(); });
+  document.querySelector("form").onsubmit = async e => {
+    e.preventDefault();
+    const text = q.value.trim(); if (!text) return;
+    add("user", text); q.value = "";
+    const pending = add("bot", "…");
+    try {
+      const r = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: session, message: text }) });
+      pending.textContent = (await r.json()).reply || "(no reply)";
+    } catch { pending.textContent = "Something went wrong. Try again."; }
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+data/
+.agent-tools/
+infra/.terraform/
+infra/*.tfstate*
+infra/*.tfvars
+infra/function.zip
+.pytest_cache/
