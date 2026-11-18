@@ -39,8 +39,8 @@ bank's policy documents ([app/policies](app/policies/)) using embedding search.
 
 ### Try it
 
-On the landing page, click **I'm a customer**. This creates a private throwaway account. Report a
-problem, then use **view as staff (demo)** in the header to work your own case in the Case Desk. Switch
+On the landing page, click **Continue as a customer**. This creates a private throwaway account. Report a
+problem, then use **Switch to staff view** in the header to work your own case in the Case Desk. Switch
 back to see the reply land in My account.
 
 ## Sign-in and access control
@@ -56,7 +56,7 @@ back to see the reply land in My account.
     be talked into filing or reading cases for anyone else.
 - **Internal notes never leave the staff side.** The customer view of a case strips them out.
 - **Card numbers and SSNs are redacted** before text reaches a model, storage, or a staff note.
-- **Demo shortcut:** "view as staff" lets any signed-in visitor switch roles so both sides can be tried.
+- **Demo shortcut:** "Switch to staff view" lets any signed-in visitor switch roles so both sides can be tried.
   In production, an administrator would grant the staff role (for example as a custom claim) and staff
   would sign in with the bank's workforce identity.
 
@@ -69,18 +69,18 @@ flowchart LR
     cx[Dialogflow CX agent] -->|webhook| run
     idp[Identity Platform] -.->|sign-in| customer & staff
 
-    subgraph run [Cloud Run · FastAPI]
+    subgraph run [Cloud Run, FastAPI]
         coord[Coordinator agent] --> intake[intake] & policy[policy] & status[my cases]
         analyst[Analyst agent]
         api[Case Desk API]
     end
 
     run -->|Gemini + embeddings| vertex[Vertex AI]
-    run --> fs[(Firestore<br/>cases · users)]
+    run --> fs[(Firestore<br/>cases and users)]
     analyst -->|industry stats| bq[(BigQuery<br/>CFPB public data)]
-    run -->|filed · escalated · status_changed| ps[[Pub/Sub case-events]]
+    run -->|case events| ps[[Pub/Sub case-events]]
     ps --> fn[Cloud Function] -->|ALERT on escalation| mon[Cloud Monitoring email]
-    gh[GitHub Actions] -->|OIDC → Workload Identity · test, build, deploy| run
+    gh[GitHub Actions] -->|test, build, deploy<br/>keyless via Workload Identity| run
 ```
 
 - **Agents:** Google ADK. The customer assistant is a coordinator with three specialist sub-agents
@@ -150,7 +150,7 @@ Open http://localhost:8080. Tests: `.venv/bin/pip install pytest httpx && .venv/
    and `DEPLOYER_SA` (`terraform output -raw deployer_sa`), then push to `main`. CI runs the tests,
    builds the image, deploys it to Cloud Run, and checks that `/health` reports the GCP stack.
 
-## Deliberate limits
+## Known limits
 
 - **The role switch is a demo affordance, not access control you would ship.** See "Sign-in and access
   control" above.
