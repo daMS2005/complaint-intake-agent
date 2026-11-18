@@ -2,43 +2,53 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My account · Northwind Resolve</title>
+<title>My account – Northwind Resolve</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0, 1fr) 380px; gap:16px; height:calc(100dvh - 60px); }
-  @media (max-width: 900px) { main { grid-template-columns:1fr; height:auto; } }
-  #assistant { height:100%; min-height:420px; }
-  #cases { overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
-  .case { border:1px solid var(--line); border-radius:10px; padding:12px; display:grid; gap:6px; }
+  main { max-width: 1160px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 32px; height: calc(100dvh - 62px); }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; height: auto; } }
+  #assistant { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-height: 480px; }
+  aside { overflow-y: auto; }
+  .case { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+  .case-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+  .case h3 { font-size: 16px; margin: 0 0 2px; }
+  .case.new-case { background: var(--green-soft); margin: 0 -12px; padding: 16px 12px; border-radius: 6px; }
 </style>
 </head>
 <body>
 <header></header>
 <main>
-  <section class="panel" id="assistant"></section>
-  <aside class="panel">
-    <h2>My cases</h2>
-    <div id="cases"><p class="muted">Loading…</p></div>
+  <section id="assistant" aria-label="Assistant"></section>
+  <aside aria-labelledby="cases-title">
+    <h2 id="cases-title">Your cases</h2>
+    <div id="cases"><p class="muted">Loading your cases…</p></div>
   </aside>
 </main>
 <script type="module">
-  import { api, chat, day, esc, header } from "/static/client.js";
+  import { api, chat, clock, day, esc, header, status } from "/static/client.js";
   await header("customer");
+  let known = null;
   async function loadCases() {
     const list = await api("/api/my/cases");
+    const fresh = known ? list.filter(c => !known.has(c.id)).map(c => c.id) : [];
+    known = new Set(list.map(c => c.id));
     document.getElementById("cases").innerHTML = list.length ? list.map(c => `
-      <div class="case">
-        <div><b>${esc(c.issue)}</b> <span class="pill ${esc(c.status)}">${esc(c.status.replace("_", " "))}</span></div>
-        <div class="muted">${esc(c.id)} · ${esc(c.product)} · response by ${day(c.due)}</div>
-        <div class="timeline">${c.timeline.map(e => `<div class="${esc(e.kind)}"><span class="muted">${day(e.at)} · ${e.kind === "reply" ? "Northwind" : "Update"}</span><br>${esc(e.text)}</div>`).join("")}</div>
-      </div>`).join("") : `<p class="muted">No cases yet. If something went wrong, tell the assistant and it will open one here.</p>`;
+      <article class="case ${fresh.includes(c.id) ? "new-case" : ""}">
+        <div class="case-head">
+          <div><h3>${esc(c.issue)}</h3><div class="muted small">${esc(c.product)}, case ${esc(c.id)}</div><div>${status(c.status)}</div></div>
+          ${clock(c)}
+        </div>
+        <ol class="timeline">${c.timeline.map(e => `<li class="${esc(e.kind)}"><small>${day(e.at)}, ${e.kind === "reply" ? "Northwind replied" : "update"}</small>${esc(e.text)}</li>`).join("")}</ol>
+      </article>`).join("")
+      : `<p class="muted">Nothing open. If something went wrong with an account, card or loan, describe it to the assistant and your case will show up here.</p>`;
   }
   chat(document.getElementById("assistant"), {
     endpoint: "/api/chat",
-    hello: "Hi, I'm Northwind's assistant. I can answer questions about fees, disputes and your rights, report a problem for you, or check on your cases.",
-    placeholder: "Ask a question or describe the problem…",
-    chips: ["There are two debit card charges of $480 I never made, from yesterday", "Can you refund an overdraft fee?",
-            "How long do you have to investigate an unauthorized debit charge?", "Where do my cases stand?"],
+    label: "Message the assistant",
+    hello: "Tell me what went wrong, ask about a fee or your rights, or ask where your cases stand.",
+    placeholder: "Describe the problem or ask a question",
+    suggestions: ["Two debit card charges of $480 I didn't make showed up yesterday", "Can you refund an overdraft fee?",
+                  "How long do you have to investigate a charge I didn't make?", "Where do my cases stand?"],
     onReply: loadCases,
   });
   loadCases();

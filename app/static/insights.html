@@ -2,39 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Insights · Northwind Resolve</title>
+<title>Insights – Northwind Resolve</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:16px; }
-  .split { display:grid; grid-template-columns:300px minmax(0, 1fr); gap:16px; }
-  @media (max-width: 860px) { .split { grid-template-columns:1fr; } }
-  #analyst { min-height:460px; }
-  .bar { display:grid; grid-template-columns:1fr 32px; gap:8px; font-size:13px; padding:4px 0; border-bottom:1px solid var(--line); }
+  main { max-width: 1160px; margin: 0 auto; padding: 24px; display: grid; gap: 32px; }
+  .figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  @media (max-width: 760px) { .figures { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .figures div { padding: 18px 20px 18px 0; }
+  .figures div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+  .figures dd { margin: 0; font-size: 40px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .figures dt { color: var(--muted); font-size: 14px; }
+  .figures .late dd { color: var(--red); }
+  .split { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 40px; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  .product { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 14px; padding: 8px 0; }
+  .product i { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--green); width: var(--share); }
+  #analyst { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-height: 480px; }
 </style>
 </head>
 <body>
 <header></header>
 <main>
-  <div class="tiles" id="tiles"></div>
+  <dl class="figures" id="figures" aria-label="Open cases at a glance"></dl>
   <div class="split">
-    <section class="panel"><h2>Open cases by product</h2><div id="products"></div></section>
-    <section class="panel"><h2>Ask the analyst</h2><div id="analyst"></div></section>
+    <section aria-labelledby="by-product"><h2 id="by-product">Open cases by product</h2><div id="products"></div></section>
+    <section aria-labelledby="ask"><h2 id="ask">Ask the analyst</h2><div id="analyst"></div></section>
   </div>
 </main>
 <script type="module">
   import { api, chat, esc, header } from "/static/client.js";
   await header("staff");
   const s = await api("/api/stats");
-  const tile = (n, label, alert) => `<div class="tile ${alert && n ? "alert" : ""}"><b>${n}</b><span class="muted">${label}</span></div>`;
-  document.getElementById("tiles").innerHTML = tile(s.open, "open cases") + tile(s.overdue, "past their legal deadline", true) +
-    tile(s.due_in_2_days, "due in the next 2 days") + tile(s.high_urgency_open, "high-urgency and open", true);
-  document.getElementById("products").innerHTML = Object.entries(s.open_by_product).map(([p, n]) => `<div class="bar"><span>${esc(p)}</span><b>${n}</b></div>`).join("");
+  const fig = (n, label, late) => `<div class="${late && n ? "late" : ""}"><dt>${label}</dt><dd>${n}</dd></div>`;
+  document.getElementById("figures").innerHTML = fig(s.open, "Open cases") + fig(s.overdue, "Past their legal deadline", true) +
+    fig(s.due_in_2_days, "Due in the next 2 days") + fig(s.high_urgency_open, "Open and high urgency", true);
+  const max = Math.max(1, ...Object.values(s.open_by_product));
+  document.getElementById("products").innerHTML = Object.entries(s.open_by_product).map(([p, n]) =>
+    `<div class="product"><span>${esc(p)}</span><b class="num">${n}</b><i style="--share:${(n / max) * 100}%"></i></div>`).join("")
+    || `<p class="muted">No open cases.</p>`;
   chat(document.getElementById("analyst"), {
     endpoint: "/api/analyst",
-    hello: "I can break down Northwind's cases, find risky ones, and compare them with complaints across the industry (CFPB data).",
-    placeholder: "Ask about cases, deadlines or industry data…",
-    chips: ["Which open cases are past their deadline?", "How many cases came in over the last 30 days, by urgency?",
-            "What are the top credit card complaint issues industry-wide?", "Compare our mortgage cases with the industry's top mortgage issues"],
+    label: "Ask the analyst",
+    hello: "Ask about Northwind's cases and deadlines, or how our complaints compare with the rest of the industry (CFPB data).",
+    placeholder: "Ask about cases, deadlines or industry data",
+    suggestions: ["Which open cases are past their deadline?", "How many cases came in over the last 30 days, by urgency?",
+                  "What are the top credit card complaints across the industry?", "How do our mortgage cases compare with the industry?"],
   });
 </script>
 </body>

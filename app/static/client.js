@@ -1,5 +1,5 @@
 // Shared by every page: sign-in (Identity Platform on GCP, developer sign-in locally), the API helper,
-// the role-aware header, and the chat widget.
+// the header, the legal-deadline clock, and the chat widget.
 const SDK = "https://www.gstatic.com/firebasejs/13.1.0";
 const config = await (await fetch("/api/config")).json();
 let fb = null;
@@ -13,6 +13,20 @@ if (config.auth === "identity_platform") {
 
 export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 export const day = iso => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+export const STATUS = { new: "New", in_review: "In review", resolved: "Resolved" };
+export const status = s => `<span class="status ${esc(s)}">${STATUS[s] ?? esc(s)}</span>`;
+
+// Days left until the legal deadline, with a bar showing how much of the allowed time is used.
+export function clock(c) {
+  if (c.status === "resolved") return `<div class="clock done"><b>Resolved</b><span>deadline was ${day(c.due)}</span></div>`;
+  const start = new Date(c.created), due = new Date(c.due), now = Date.now();
+  const days = Math.ceil((due - now) / 864e5);
+  const used = Math.min(100, Math.max(0, ((now - start) / (due - start)) * 100));
+  const [cls, big, small] = days < 0 ? ["late", `${-days} ${-days === 1 ? "day" : "days"}`, `overdue since ${day(c.due)}`]
+    : days === 0 ? ["late", "Today", "deadline"]
+    : [days <= 2 ? "soon" : "", `${days} ${days === 1 ? "day" : "days"}`, `left, due ${day(c.due)}`];
+  return `<div class="clock ${cls}" style="--used:${used.toFixed(0)}%"><b>${big}</b><span>${small}</span><i></i></div>`;
+}
 
 async function token() {
   if (fb) return fb.auth.currentUser ? fb.auth.currentUser.getIdToken() : null;
@@ -54,48 +68,59 @@ export async function header(requiredRole) {
   const user = await me();
   if (!user) return void (location.href = "/");
   if (requiredRole && user.role !== requiredRole) return void (location.href = home(user));
-  const links = user.role === "staff" ? [["/desk", "Case Desk"], ["/insights", "Insights"]] : [["/app", "My account"]];
-  const other = user.role === "staff" ? "customer" : "staff";
+  const staff = user.role === "staff";
+  const links = staff ? [["/desk", "Case Desk"], ["/insights", "Insights"]] : [["/app", "My account"]];
   document.querySelector("header").innerHTML = `
     <a class="brand" href="/">Northwind Resolve</a>
-    <nav>${links.map(([h, t]) => `<a href="${h}" class="${location.pathname === h ? "on" : ""}">${t}</a>`).join("")}</nav>
-    <span class="who">Signed in as ${user.role} · <a href="#" id="switch">view as ${other} (demo)</a> · <a href="#" id="out">sign out</a></span>`;
-  document.getElementById("switch").onclick = e => { e.preventDefault(); setRole(other); };
-  document.getElementById("out").onclick = e => { e.preventDefault(); signOut(); };
-  badge();
+    <nav aria-label="Main">${links.map(([h, t]) => `<a href="${h}" ${location.pathname === h ? 'aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
+    <div class="account">
+      <button class="link" id="switch">Switch to ${staff ? "customer" : "staff"} view</button>
+      <button id="out">Sign out</button>
+    </div>`;
+  document.getElementById("switch").onclick = () => setRole(staff ? "customer" : "staff");
+  document.getElementById("out").onclick = signOut;
+  runtime();
   return user;
 }
 
-export function chat(root, { endpoint, hello, chips, placeholder, onReply }) {
+// Which side of the runtime check this deployment is on: Google Cloud, or the local open-source stack.
+export async function runtime() {
+  const h = await (await fetch("/health")).json();
+  const el = document.createElement("span");
+  el.className = "runtime";
+  el.textContent = h.backend === "gcp" ? "Running on Google Cloud" : "Running locally";
+  el.title = `Model: ${h.model}\nEmbeddings: ${h.embeddings}\nSign-in: ${h.auth}\nStorage: ${h.store}\nEvents: ${h.events}`;
+  document.querySelector("header").append(el);
+}
+
+export function chat(root, { endpoint, hello, suggestions, placeholder, label, onReply }) {
   root.classList.add("chat");
-  root.innerHTML = `<div class="log"></div><div class="chips"></div>
-    <form><input maxlength="2000" autocomplete="off" placeholder="${esc(placeholder)}"><button class="primary">Send</button></form>`;
-  const log = root.querySelector(".log"), input = root.querySelector("input"), session = crypto.randomUUID();
+  root.innerHTML = `<div class="log" role="log" aria-live="polite"></div>
+    <div class="suggestions" aria-label="Example questions"></div>
+    <form><input maxlength="2000" autocomplete="off" aria-label="${esc(label)}" placeholder="${esc(placeholder)}"><button class="primary">Send</button></form>`;
+  const log = root.querySelector(".log"), input = root.querySelector("input"), send = root.querySelector("form button");
+  const session = crypto.randomUUID();
   const add = (cls, text) => { const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = text; log.append(d); log.scrollTop = log.scrollHeight; return d; };
   add("bot", hello);
-  for (const c of chips) {
-    const b = document.createElement("button"); b.type = "button"; b.textContent = c;
-    b.onclick = () => { input.value = c; input.focus(); };
-    root.querySelector(".chips").append(b);
+  for (const s of suggestions) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = s;
+    b.onclick = () => { input.value = s; input.focus(); };
+    root.querySelector(".suggestions").append(b);
   }
   root.querySelector("form").onsubmit = async e => {
     e.preventDefault();
-    const text = input.value.trim(); if (!text) return;
-    add("user", text); input.value = "";
-    const pending = add("bot", "…");
+    const text = input.value.trim(); if (!text || send.disabled) return;
+    add("user", text); input.value = ""; send.disabled = true;
+    const pending = add("bot pending", "Working on it…");
     try {
-      pending.textContent = (await api(endpoint, { method: "POST", body: JSON.stringify({ session_id: session, message: text }) })).reply || "(no reply)";
+      const { reply } = await api(endpoint, { method: "POST", body: JSON.stringify({ session_id: session, message: text }) });
+      pending.textContent = reply || "No answer came back. Send the message again.";
       onReply?.();
-    } catch { pending.textContent = "Sorry, that didn't work. Try again."; }
+    } catch {
+      pending.textContent = "The message didn't go through. Check your connection and send it again.";
+      input.value = text;
+    } finally {
+      pending.classList.remove("pending"); send.disabled = false; input.focus();
+    }
   };
-}
-
-// Which side of the runtime check this deployment is on (GCP or the local open-source stack).
-export async function badge() {
-  const h = await (await fetch("/health")).json();
-  const b = document.createElement("span");
-  b.className = "badge " + h.backend;
-  b.textContent = (h.backend === "gcp" ? "● GCP · " : "● Local · ") + h.model;
-  b.title = `auth: ${h.auth}\nembeddings: ${h.embeddings}\nstore: ${h.store}\nevents: ${h.events}`;
-  document.querySelector("header").append(b);
 }

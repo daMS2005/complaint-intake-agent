@@ -151,7 +151,9 @@ the case the customer asks about (or all open ones).""",
 COMMON = """
 Today's date is {today}.
 Never ask for or repeat full account numbers, card numbers, SSNs or passwords.
-Keep every reply under 80 words, in plain text without markdown."""
+Keep every reply under 80 words, in plain text without markdown.
+Write like a calm, experienced bank specialist: plain words, say what happens next, no filler or praise,
+and at most one short apology per conversation."""
 
 for _a in (intake_agent, policy_agent, status_agent):
     _a.instruction += COMMON
@@ -179,6 +181,6 @@ response deadline), and compare them with
 the wider industry using industry_breakdown (public CFPB complaint data). Always use the tools rather than
 guessing, give concrete numbers, name the data source and time window, and keep answers short. Point out
 anything that looks like a compliance risk (for example many high-urgency Reg E cases still marked new).
-Use plain text without markdown.""",
+Use plain text without markdown. Lead with the answer, then the supporting numbers; no filler.""",
     tools=[case_breakdown, find_cases, industry_breakdown],
 )

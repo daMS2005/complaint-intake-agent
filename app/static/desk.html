@@ -2,81 +2,123 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Case Desk · Northwind Resolve</title>
+<title>Case Desk – Northwind Resolve</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-  main { max-width:1240px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0, 1fr) 380px; gap:16px; }
-  @media (max-width: 960px) { main { grid-template-columns:1fr; } }
-  .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
-  .filters span { margin-left:auto; }
-  .table { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; }
-  td.wrap { white-space:normal; min-width:160px; }
-  tr.row { cursor:pointer; } tr.row:hover, tr.sel { background:var(--panel); }
-  aside { align-self:start; display:grid; gap:10px; position:sticky; top:12px; }
-  textarea { width:100%; min-height:64px; }
+  main { max-width: 1320px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 0; }
+  @media (max-width: 1040px) { main { grid-template-columns: 1fr; } #detail { border-left: 0; border-top: 1px solid var(--line); padding: 24px 0 0; margin-top: 24px; } }
+  .bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 16px; padding-right: 24px; }
+  .bar label { font-weight: 500; }
+  .bar #count { margin-left: auto; color: var(--muted); font-size: 14px; }
+  .table { overflow-x: auto; padding-right: 24px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 14px; font-weight: 600; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); }
+  td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--surface); }
+  tbody tr[aria-selected="true"] td { background: var(--green-soft); }
+  td .issue { font-weight: 600; }
+  #detail { border-left: 1px solid var(--line); padding: 0 0 0 28px; align-self: start; position: sticky; top: 16px; display: grid; gap: 16px; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+  dt { color: var(--muted); } dd { margin: 0; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+  #saved { font-size: 14px; color: var(--green); min-height: 1.4em; margin: 0; }
+  @media (max-width: 640px) { main { padding: 16px; } .bar, .table { padding-right: 0; } th:nth-child(3), td:nth-child(3) { display: none; } }
 </style>
 </head>
 <body>
 <header></header>
 <main>
-  <section>
-    <div class="filters">
-      <select id="fs"><option value="open">Open cases</option><option value="">All cases</option><option value="resolved">Resolved</option></select>
-      <select id="fu"><option value="">All urgencies</option><option>high</option><option>medium</option><option>low</option></select>
+  <section aria-labelledby="queue-title">
+    <h2 id="queue-title" class="muted small" hidden>Case queue</h2>
+    <div class="bar">
+      <label>Show <select id="show"><option value="open">Open cases</option><option value="resolved">Resolved cases</option><option value="all">All cases</option></select></label>
+      <label>Urgency <select id="urgency"><option value="">Any</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
       <button id="refresh">Refresh</button>
-      <span class="muted" id="count"></span>
+      <span id="count" aria-live="polite"></span>
     </div>
     <div class="table"><table>
-      <thead><tr><th>Due</th><th>Case</th><th>Issue</th><th>Product</th><th>Urgency</th><th>Rules</th><th>Status</th></tr></thead>
+      <thead><tr><th scope="col">Deadline</th><th scope="col">Case</th><th scope="col">Product</th><th scope="col">Urgency</th><th scope="col">Status</th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
   </section>
-  <aside class="panel" id="detail"><p class="muted">Open cases are sorted by legal deadline. Select one to work it.</p></aside>
+  <aside id="detail" aria-live="polite">
+    <h2>Pick a case to work on</h2>
+    <p class="muted">Open cases are sorted by deadline, so the most urgent is at the top.</p>
+  </aside>
 </main>
 <script type="module">
-  import { api, day, esc, header } from "/static/client.js";
+  import { STATUS, api, clock, day, esc, header, status } from "/static/client.js";
   await header("staff");
   let cases = [], selected = null;
-  const due = c => {
-    if (c.status === "resolved") return `<span class="muted">${day(c.due)}</span>`;
-    const d = Math.ceil((new Date(c.due) - Date.now()) / 864e5);
-    return d < 0 ? `<span class="pill overdue">${-d}d overdue</span>` : `<span class="pill ${d <= 2 ? "medium" : "low"}">in ${d}d</span>`;
-  };
+  const URGENCY = { high: "High", medium: "Medium", low: "Low" };
+
   async function load() { cases = await api("/api/cases"); render(); if (selected) detail(); }
+
   function render() {
-    const fs = document.getElementById("fs").value, fu = document.getElementById("fu").value;
-    const shown = cases.filter(c => (fs === "open" ? c.status !== "resolved" : !fs || c.status === fs) && (!fu || c.urgency === fu))
-      .sort((a, b) => (fs === "open" ? a.due.localeCompare(b.due) : b.created.localeCompare(a.created)));
-    document.getElementById("count").textContent = `${shown.length} of ${cases.length} cases`;
-    document.getElementById("rows").innerHTML = shown.map(c => `
-      <tr class="row ${c.id === selected ? "sel" : ""}" data-id="${esc(c.id)}">
-        <td>${due(c)}</td><td>${esc(c.id)}</td><td class="wrap">${esc(c.issue)}</td><td class="wrap">${esc(c.product)}</td>
-        <td><span class="pill ${esc(c.urgency)}">${esc(c.urgency)}</span></td><td>${esc(c.regulations.join(", "))}</td>
-        <td><span class="pill ${esc(c.status)}">${esc(c.status.replace("_", " "))}</span></td></tr>`).join("");
-    document.querySelectorAll("tr.row").forEach(r => (r.onclick = () => { selected = r.dataset.id; render(); detail(); }));
+    const show = document.getElementById("show").value, urgency = document.getElementById("urgency").value;
+    const shown = cases
+      .filter(c => (show === "all" || (show === "open") === (c.status !== "resolved")) && (!urgency || c.urgency === urgency))
+      .sort((a, b) => (show === "open" ? a.due.localeCompare(b.due) : b.created.localeCompare(a.created)));
+    document.getElementById("count").textContent = `${shown.length} ${shown.length === 1 ? "case" : "cases"}`;
+    document.getElementById("rows").innerHTML = shown.length ? shown.map(c => `
+      <tr tabindex="0" data-id="${esc(c.id)}" aria-selected="${c.id === selected}">
+        <td>${clock(c)}</td>
+        <td><div class="issue">${esc(c.issue)}</div><div class="muted small num">${esc(c.id)}</div></td>
+        <td class="small">${esc(c.product)}</td>
+        <td class="small ${c.urgency === "high" ? "urgency-high" : ""}">${URGENCY[c.urgency] ?? esc(c.urgency)}</td>
+        <td>${status(c.status)}</td>
+      </tr>`).join("")
+      : `<tr><td colspan="5" class="muted">No cases match these filters. Change "Show" or "Urgency" to see more.</td></tr>`;
+    document.querySelectorAll("tbody tr[data-id]").forEach(r => {
+      const open = () => { selected = r.dataset.id; render(); detail(); document.getElementById("reply")?.focus(); };
+      r.onclick = open;
+      r.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+    });
   }
+
   function detail() {
     const c = cases.find(x => x.id === selected); if (!c) return;
+    const kind = { reply: "Reply to customer", note: "Internal note", status: "Update" };
     document.getElementById("detail").innerHTML = `
-      <h2>${esc(c.id)} · ${esc(c.issue)}</h2>
-      <div class="muted">${esc(c.product)} · opened ${day(c.created)} · respond by ${day(c.due)} ${due(c)}</div>
-      <div>${esc(c.summary)}</div>
-      <div class="muted">AI triage: <span class="pill ${esc(c.urgency)}">${esc(c.urgency)}</span> · ${esc(c.regulations.join(", ") || "no rules flagged")}</div>
-      <div class="timeline">${c.timeline.map(e => `<div class="${esc(e.kind)}"><span class="muted">${day(e.at)} · ${e.kind === "note" ? "internal note" : e.kind === "reply" ? "reply to customer" : "update"}</span><br>${esc(e.text)}</div>`).join("")}</div>
-      <textarea id="reply" maxlength="2000" placeholder="Reply to the customer (they see this under My account)"></textarea>
-      <textarea id="note" maxlength="2000" placeholder="Internal note (staff only)"></textarea>
-      <label class="muted">Status <select id="st">${["new", "in_review", "resolved"].map(s => `<option value="${s}" ${s === c.status ? "selected" : ""}>${s.replace("_", " ")}</option>`).join("")}</select></label>
-      <button class="primary" id="save">Save</button>`;
-    document.getElementById("save").onclick = async () => {
+      <div><h2>${esc(c.issue)}</h2>${clock(c)}</div>
+      <dl>
+        <dt>Case</dt><dd class="num">${esc(c.id)}</dd>
+        <dt>Product</dt><dd>${esc(c.product)}</dd>
+        <dt>Opened</dt><dd>${day(c.created)}</dd>
+        <dt>Urgency</dt><dd class="${c.urgency === "high" ? "urgency-high" : ""}">${URGENCY[c.urgency] ?? esc(c.urgency)}</dd>
+        <dt>Rules</dt><dd>${esc(c.regulations.join(", ") || "None flagged")}</dd>
+        <dt>Status</dt><dd>${status(c.status)}</dd>
+      </dl>
+      <p style="margin:0">${esc(c.summary)}</p>
+      <ol class="timeline">${c.timeline.map(e => `<li class="${esc(e.kind)}"><small>${day(e.at)}, ${kind[e.kind] ?? "Update"}</small>${esc(e.text)}</li>`).join("")}</ol>
+      <form id="work" style="display:grid;gap:12px">
+        <label>Reply to customer <span class="hint">They see this in their account.</span><textarea id="reply" maxlength="2000"></textarea></label>
+        <label>Internal note <span class="hint">Only staff see this.</span><textarea id="note" maxlength="2000"></textarea></label>
+        <label>Status <select id="st">${Object.entries(STATUS).map(([v, t]) => `<option value="${v}" ${v === c.status ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <button class="primary">Save changes</button>
+        <p id="saved" role="status"></p>
+      </form>`;
+    document.getElementById("work").onsubmit = async e => {
+      e.preventDefault();
       const v = id => document.getElementById(id).value.trim() || null;
-      Object.assign(c, await api(`/api/cases/${encodeURIComponent(c.id)}`, { method: "PATCH", body: JSON.stringify({ status: v("st"), reply: v("reply"), note: v("note") }) }));
-      render(); detail();
+      const body = { status: v("st"), reply: v("reply"), note: v("note") };
+      const msg = document.getElementById("saved");
+      if (!body.reply && !body.note && body.status === c.status) {
+        msg.textContent = "Nothing to save yet. Write a reply or a note, or change the status."; return;
+      }
+      const button = e.submitter; button.disabled = true;
+      try {
+        Object.assign(c, await api(`/api/cases/${encodeURIComponent(c.id)}`, { method: "PATCH", body: JSON.stringify(body) }));
+        render(); detail();
+        document.getElementById("saved").textContent = body.reply ? "Changes saved. The customer can see your reply." : "Changes saved.";
+      } catch {
+        msg.textContent = "Changes weren't saved. Check your connection and save again."; button.disabled = false;
+      }
     };
   }
-  document.getElementById("fs").onchange = document.getElementById("fu").onchange = render;
+
+  document.getElementById("show").onchange = document.getElementById("urgency").onchange = render;
   document.getElementById("refresh").onclick = load;
   load();
 </script>

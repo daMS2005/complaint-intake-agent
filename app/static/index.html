@@ -3,73 +3,112 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Northwind Resolve</title>
+<meta name="description" content="Complaint handling for a retail bank, with every case tracked against its legal deadline.">
 <link rel="stylesheet" href="/static/style.css">
 <style>
-  main { max-width:1000px; margin:0 auto; padding:36px 16px; display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:32px; }
-  @media (max-width: 860px) { main { grid-template-columns:1fr; } }
-  .lead { color:var(--muted); font-size:16px; margin:0 0 24px; }
-  ol { padding:0; margin:0 0 24px; list-style:none; counter-reset:s; display:grid; gap:10px; }
-  ol li { counter-increment:s; display:grid; grid-template-columns:28px 1fr; gap:10px; }
-  ol li::before { content:counter(s); width:24px; height:24px; border-radius:50%; border:1px solid var(--line); display:grid; place-items:center; font-size:12px; color:var(--muted); }
-  ol li span { color:var(--muted); }
-  form { display:grid; gap:8px; } .row { display:flex; gap:8px; } .row button { flex:1; }
-  .or { text-align:center; color:var(--muted); font-size:12px; margin:10px 0; }
-  #err { color:var(--red); font-size:13px; min-height:1em; }
+  main { max-width: 1120px; margin: 0 auto; padding: 56px 24px 40px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 56px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; gap: 32px; padding-top: 32px; } }
+  .lead { font-size: 19px; color: var(--muted); margin: 0 0 32px; }
+  figure { margin: 0 0 40px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; max-width: 560px; }
+  figure .issue { font-weight: 600; }
+  figcaption { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+  ol { margin: 0; padding-left: 22px; display: grid; gap: 14px; max-width: 62ch; }
+  ol li::marker { font-weight: 700; color: var(--green); }
+  #signin { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 24px; display: grid; gap: 14px; }
+  #signin p { margin: 0; }
+  .divider { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 12px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #error { color: var(--red); font-size: 14px; min-height: 1.4em; }
+  .jump { display: none; }
+  @media (max-width: 900px) {
+    .jump { display: inline-block; margin: -16px 0 32px; padding: 10px 16px; border-radius: 6px; background: var(--green); color: #fff; text-decoration: none; font-weight: 500; }
+    figure { grid-template-columns: 1fr; }
+  }
+  @media (prefers-color-scheme: dark) { .jump { color: #0d1a16; } }
+  footer { max-width: 1120px; margin: 0 auto; padding: 0 24px 40px; font-size: 14px; color: var(--muted); }
 </style>
 </head>
 <body>
 <header><a class="brand" href="/">Northwind Resolve</a></header>
 <main>
   <section>
-    <h1>Complaint handling for a retail bank</h1>
-    <p class="lead">Customers tell an AI assistant what went wrong. Specialists resolve it before the legal deadline.
-      Managers see where complaints come from. Northwind Bank is fictional; the regulations and the industry data are real.</p>
-    <h2>How a complaint moves through it</h2>
+    <h1>Every bank complaint, answered before its legal deadline</h1>
+    <p class="lead">Customers tell an assistant what went wrong. Northwind Resolve opens the case, starts the clock the
+      law sets for it, and puts it in front of a specialist.</p>
+    <a class="jump" href="#signin">Try it</a>
+
+    <figure aria-label="Example case">
+      <div>
+        <div class="issue">Two debit card charges of $480 the customer didn't make</div>
+        <div class="muted small">Checking account. Regulation E gives the bank 10 business days to investigate.</div>
+      </div>
+      <div id="sample-clock"></div>
+      <figcaption>How a case looks to the team working it.</figcaption>
+    </figure>
+
+    <h2>What happens to a complaint</h2>
     <ol>
-      <li><div><b>The customer signs in and asks for help.</b> <span>The assistant answers policy questions, or files a case
-        with product, urgency and the rules that apply (Reg E, Reg Z, RESPA, FCRA, FDCPA).</span></div></li>
-      <li><div><b>The case lands in the Case Desk with its legal deadline.</b> <span>10 business days for Reg E errors,
-        15 days otherwise. Urgent cases alert the compliance team immediately.</span></div></li>
-      <li><div><b>A specialist works it.</b> <span>Internal notes, a reply to the customer, a status change. Every change
-        is an event other systems can react to.</span></div></li>
-      <li><div><b>The customer sees the outcome</b> <span>under My account, without calling in.</span></div></li>
-      <li><div><b>Managers watch the trends.</b> <span>Deadline risk, and an analyst agent that compares Northwind's cases
-        with complaints across the industry.</span></div></li>
+      <li>The customer signs in and describes the problem. The assistant asks what it needs and files the case,
+        or answers from the bank's policies if there is nothing to file.</li>
+      <li>The case gets its deadline: 10 business days for card and transfer errors, 15 days for everything else.
+        Fraud and other urgent cases alert the compliance team right away.</li>
+      <li>A specialist picks it up in the Case Desk, replies to the customer and records what was done.</li>
+      <li>The customer sees the reply in their account. Managers see which cases are close to their deadline and
+        how Northwind compares with complaints across the industry.</li>
     </ol>
-    <p class="muted">Built on Google Cloud (ADK agents on Gemini, Dialogflow CX, Cloud Run, Firestore, Pub/Sub, BigQuery,
-      Identity Platform, Terraform) with a fallback to a local open-source stack.
-      <a href="https://github.com/daMS2005/complaint-intake-agent">Architecture and code</a>.</p>
   </section>
-  <aside class="panel" id="signin">
-    <h2>Try it</h2>
-    <p class="muted">Each demo button creates a private throwaway account. You can switch between the customer and staff views at any time.</p>
-    <div class="row"><button class="primary" id="demo-customer">I'm a customer</button><button id="demo-staff">I'm bank staff</button></div>
-    <p class="or">or use an email account</p>
-    <form id="email">
-      <input type="email" id="em" placeholder="Email" required autocomplete="email">
-      <input type="password" id="pw" placeholder="Password (6+ characters)" required minlength="6" autocomplete="current-password">
-      <div class="row"><button>Sign in</button><button type="button" id="create">Create account</button></div>
+
+  <aside id="signin" aria-labelledby="try">
+    <h2 id="try">Try it</h2>
+    <p class="small muted">Pick a side to start. Each choice creates a private demo account, and you can switch sides at any time.</p>
+    <button class="primary" id="as-customer">Continue as a customer</button>
+    <button id="as-staff">Continue as bank staff</button>
+    <form id="email-form" class="divider" novalidate>
+      <p class="small">Or use your own email</p>
+      <label>Email <input type="email" id="email" autocomplete="email" required></label>
+      <label>Password <input type="password" id="password" autocomplete="current-password" minlength="6" required></label>
+      <div class="pair"><button>Sign in</button><button type="button" id="create">Create account</button></div>
     </form>
-    <p id="err"></p>
+    <p id="error" role="alert"></p>
   </aside>
 </main>
+<footer>Northwind Bank is fictional. The regulations, deadlines and industry complaint figures are real.
+  <a href="https://github.com/daMS2005/complaint-intake-agent">Code and architecture</a></footer>
 <script type="module">
-  import { badge, demoAccount, home, me, setRole, signIn } from "/static/client.js";
-  badge();
-  const err = m => (document.getElementById("err").textContent = m);
-  const go = async role => { const user = await me(); role && role !== user.role ? setRole(role) : (location.href = home(user)); };
-  const user = await me();
-  if (user) document.getElementById("signin").innerHTML = `<h2>Welcome back</h2><p class="muted">You're signed in as ${user.role}.</p>
-    <button class="primary" onclick="location.href='${home(user)}'">Continue</button>`;
-  document.getElementById("demo-customer")?.addEventListener("click", async () => { await demoAccount(); go("customer"); });
-  document.getElementById("demo-staff")?.addEventListener("click", async () => { await demoAccount(); go("staff"); });
-  const email = async create => {
-    const f = document.getElementById("email"); if (!f.reportValidity()) return;
-    try { await signIn(document.getElementById("em").value, document.getElementById("pw").value, create); go(); }
-    catch (e) { err(e.code ? e.code.replace("auth/", "").replaceAll("-", " ") : "Sign-in failed"); }
+  import { clock, demoAccount, home, me, runtime, setRole, signIn } from "/static/client.js";
+  runtime();
+  const day = 864e5;
+  document.getElementById("sample-clock").innerHTML = clock({ status: "new", created: new Date(Date.now() - 9 * day), due: new Date(Date.now() + 5 * day) });
+
+  const MESSAGES = {
+    "auth/invalid-credential": "That email and password don't match an account.",
+    "auth/email-already-in-use": "That email already has an account. Sign in instead.",
+    "auth/weak-password": "Use at least 6 characters for the password.",
+    "auth/invalid-email": "Enter an email address like name@example.com.",
+    "auth/too-many-requests": "Too many attempts. Wait a minute, then try again.",
   };
-  document.getElementById("email")?.addEventListener("submit", e => { e.preventDefault(); email(false); });
-  document.getElementById("create")?.addEventListener("click", () => email(true));
+  const error = e => (document.getElementById("error").textContent = MESSAGES[e?.code] || "Sign-in didn't work. Try again.");
+  const busy = on => document.querySelectorAll("#signin button").forEach(b => (b.disabled = on));
+  const go = async role => { const user = await me(); role && role !== user.role ? setRole(role) : (location.href = home(user)); };
+  const run = async (fn, role) => { busy(true); try { await fn(); await go(role); } catch (e) { error(e); busy(false); } };
+
+  const user = await me();
+  if (user) {
+    document.getElementById("signin").innerHTML = `<h2>You're signed in</h2>
+      <button class="primary" id="continue">${user.role === "staff" ? "Open the Case Desk" : "Open My account"}</button>`;
+    document.getElementById("continue").onclick = () => (location.href = home(user));
+  } else {
+    document.getElementById("as-customer").onclick = () => run(demoAccount, "customer");
+    document.getElementById("as-staff").onclick = () => run(demoAccount, "staff");
+    const email = create => {
+      const em = document.getElementById("email"), pw = document.getElementById("password");
+      if (!em.value || !em.checkValidity()) return error({ code: "auth/invalid-email" });
+      if (pw.value.length < 6) return error({ code: "auth/weak-password" });
+      run(() => signIn(em.value, pw.value, create));
+    };
+    document.getElementById("email-form").onsubmit = e => { e.preventDefault(); email(false); };
+    document.getElementById("create").onclick = () => email(true);
+  }
 </script>
 </body>
 </html>
