@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My account – Northwind Resolve</title>
+<title>Assistant – Northwind Resolve</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
   main { max-width: 1160px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 32px; height: calc(100dvh - 62px); }
   @media (max-width: 920px) { main { grid-template-columns: 1fr; height: auto; } }
   #assistant { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px; min-height: 480px; }
   aside { overflow-y: auto; }
-  .case { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+  .case { padding: 14px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; color: var(--ink); text-decoration: none; }
+  .case:hover h3 { text-decoration: underline; }
   .case-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
   .case h3 { font-size: 16px; margin: 0 0 2px; }
   .case.new-case { background: var(--green-soft); margin: 0 -12px; padding: 16px 12px; border-radius: 6px; }
@@ -25,7 +26,7 @@
   </aside>
 </main>
 <script type="module">
-  import { api, chat, clock, day, docs, esc, header, status, upload, wireDownloads } from "/static/client.js";
+  import { api, chat, clock, esc, header, status } from "/static/client.js";
   await header("customer");
   let known = null;
   async function loadCases() {
@@ -33,26 +34,13 @@
     const fresh = known ? list.filter(c => !known.has(c.id)).map(c => c.id) : [];
     known = new Set(list.map(c => c.id));
     document.getElementById("cases").innerHTML = list.length ? list.map(c => `
-      <article class="case ${fresh.includes(c.id) ? "new-case" : ""}">
+      <a class="case ${fresh.includes(c.id) ? "new-case" : ""}" href="/cases?id=${encodeURIComponent(c.id)}">
         <div class="case-head">
-          <div><h3>${esc(c.issue)}</h3><div class="muted small">${esc(c.product)}, case ${esc(c.id)}</div><div>${status(c.status)}</div></div>
-          ${clock(c)}
+          <div><h3>${esc(c.issue)}</h3><div class="muted small">Case ${esc(c.id)}</div><div>${status(c.status)}</div></div>
+          ${clock(c).replace('class="clock', 'class="clock small-clock')}
         </div>
-        <ol class="timeline">${c.timeline.map(e => `<li class="${esc(e.kind)}"><small>${day(e.at)}, ${e.kind === "reply" ? "Northwind replied" : "update"}</small>${esc(e.text)}</li>`).join("")}</ol>
-        ${docs(c)}
-        ${c.status === "resolved" ? "" : `<label class="small">Add a document <span class="hint">A statement, letter or screenshot. PDF, PNG or JPEG, up to 5 MB.</span>
-          <input type="file" accept="application/pdf,image/png,image/jpeg" data-upload="${esc(c.id)}"></label>
-          <p class="small muted" role="status" id="up-${esc(c.id)}"></p>`}
-      </article>`).join("")
+      </a>`).join("") + `<p class="small"><a href="/cases">Open My cases</a> to read replies, write back or add documents.</p>`
       : `<p class="muted">Nothing open. If something went wrong with an account, card or loan, describe it to the assistant and your case will show up here.</p>`;
-    wireDownloads(document.getElementById("cases"));
-    document.querySelectorAll("[data-upload]").forEach(input => (input.onchange = async () => {
-      const msg = document.getElementById("up-" + input.dataset.upload), file = input.files[0];
-      if (!file) return;
-      msg.textContent = `Uploading ${file.name}…`; input.disabled = true;
-      try { await upload(input.dataset.upload, file); await loadCases(); }
-      catch (e) { msg.textContent = e.message; input.disabled = false; }
-    }));
   }
   chat(document.getElementById("assistant"), {
     endpoint: "/api/chat",

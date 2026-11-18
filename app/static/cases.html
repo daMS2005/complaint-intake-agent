@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My cases – Northwind Resolve</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  main { max-width: 1160px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 0; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } #detail { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 24px; margin-top: 16px; } }
+  #list { display: grid; align-content: start; }
+  #list a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 14px 12px; color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); border-radius: 6px; }
+  #list a:hover { background: var(--surface); }
+  #list a[aria-current="true"] { background: var(--green-soft); }
+  #list .issue { font-weight: 600; }
+  .tag { font-size: 12px; font-weight: 600; color: var(--green); }
+  #detail { border-left: 1px solid var(--line); padding-left: 32px; display: grid; gap: 20px; align-content: start; }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+  .head h1 { font-size: 24px; margin: 0 0 4px; max-width: none; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+  dt { color: var(--muted); } dd { margin: 0; }
+  form { display: grid; gap: 10px; }
+  .closed { font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header></header>
+<main>
+  <nav id="list" aria-label="Your cases"><p class="muted">Loading your cases…</p></nav>
+  <section id="detail" aria-live="polite"></section>
+</main>
+<script type="module">
+  import { api, clock, day, docs, esc, header, status, upload, wireDownloads } from "/static/client.js";
+  await header("customer");
+  const WHO = { reply: "Northwind replied", customer: "You wrote", file: "Document added", status: "Update" };
+  const seenKey = id => "nw-seen-" + id;
+  const lastReply = c => c.timeline.filter(e => e.kind === "reply").at(-1)?.at || "";
+  const unread = c => { try { return lastReply(c) > (localStorage.getItem(seenKey(c.id)) || ""); } catch { return false; } };
+  let cases = [];
+
+  async function load() {
+    cases = await api("/api/my/cases");
+    const wanted = new URLSearchParams(location.search).get("id");
+    const current = cases.find(c => c.id === wanted) || cases[0];
+    if (!cases.length) {
+      document.getElementById("list").innerHTML = "";
+      document.getElementById("detail").innerHTML = `<h1 style="font-size:24px">No cases yet</h1>
+        <p class="muted">When something goes wrong with an account, card or loan, describe it to the assistant. It opens a case,
+          and you can follow it here.</p><p><a href="/app">Talk to the assistant</a></p>`;
+      return;
+    }
+    renderList(current.id);
+    show(current);
+  }
+
+  function renderList(selected) {
+    document.getElementById("list").innerHTML = cases.map(c => `
+      <a href="/cases?id=${encodeURIComponent(c.id)}" data-id="${esc(c.id)}" aria-current="${c.id === selected}">
+        <span class="issue">${esc(c.issue)}</span>${clock(c).replace('class="clock', 'class="clock small-clock')}
+        <span>${status(c.status)} ${unread(c) && c.id !== selected ? '<span class="tag">New reply</span>' : ""}</span>
+      </a>`).join("");
+    document.querySelectorAll("#list a").forEach(a => (a.onclick = e => {
+      e.preventDefault();
+      history.pushState(null, "", a.href);
+      const c = cases.find(x => x.id === a.dataset.id);
+      renderList(c.id); show(c);
+    }));
+  }
+
+  function show(c) {
+    try { localStorage.setItem(seenKey(c.id), lastReply(c) || c.created); } catch {}
+    const open = c.status !== "resolved";
+    document.getElementById("detail").innerHTML = `
+      <div class="head"><div><h1>${esc(c.issue)}</h1>${status(c.status)}</div>${clock(c)}</div>
+      <dl>
+        <dt>Case</dt><dd class="num">${esc(c.id)}</dd>
+        <dt>Product</dt><dd>${esc(c.product)}</dd>
+        <dt>Opened</dt><dd>${day(c.created)}</dd>
+        <dt>Response due</dt><dd>${day(c.due)}</dd>
+      </dl>
+      <p style="margin:0">${esc(c.summary)}</p>
+      <section aria-labelledby="history"><h2 id="history">History</h2>
+        <ol class="timeline">${c.timeline.map(e => `<li class="${esc(e.kind)}"><small>${day(e.at)}, ${WHO[e.kind] ?? "Update"}</small>${esc(e.text)}</li>`).join("")}</ol>
+      </section>
+      <section aria-labelledby="documents"><h2 id="documents">Documents</h2>
+        ${docs(c) || '<p class="muted small" style="margin:0">No documents yet.</p>'}
+        ${open ? `<label class="small" style="margin-top:12px">Add a document <span class="hint">A statement, letter or screenshot. PDF, PNG or JPEG, up to 5 MB.</span>
+          <input type="file" id="file" accept="application/pdf,image/png,image/jpeg"></label>
+          <p class="small muted" role="status" id="file-msg"></p>` : ""}
+      </section>
+      ${open ? `<form id="write"><label>Write to Northwind <span class="hint">A specialist reads every message on this case.</span>
+          <textarea id="text" maxlength="2000" required></textarea></label>
+          <div><button class="primary">Send message</button></div><p class="small muted" role="status" id="write-msg"></p></form>`
+        : `<p class="closed">This case is closed. If the problem is back, tell the <a href="/app">assistant</a> and it will open a new case.</p>`}`;
+    wireDownloads(document.getElementById("detail"));
+    if (!open) return;
+    document.getElementById("file").onchange = async e => {
+      const file = e.target.files[0], msg = document.getElementById("file-msg"); if (!file) return;
+      msg.textContent = `Uploading ${file.name}…`; e.target.disabled = true;
+      try { Object.assign(c, await upload(c.id, file)); show(c); document.getElementById("file-msg").textContent = `${file.name} added.`; }
+      catch (err) { msg.textContent = err.message; e.target.disabled = false; }
+    };
+    document.getElementById("write").onsubmit = async e => {
+      e.preventDefault();
+      const text = document.getElementById("text").value.trim(), msg = document.getElementById("write-msg");
+      if (!text) { msg.textContent = "Write a message first."; return; }
+      e.submitter.disabled = true;
+      try {
+        Object.assign(c, await api(`/api/my/cases/${encodeURIComponent(c.id)}/messages`, { method: "POST", body: JSON.stringify({ text }) }));
+        show(c); document.getElementById("write-msg").textContent = "Message sent. A specialist will see it on your case.";
+      } catch { msg.textContent = "The message wasn't sent. Check your connection and send it again."; e.submitter.disabled = false; }
+    };
+  }
+
+  window.onpopstate = load;
+  load();
+</script>
+</body>
+</html>

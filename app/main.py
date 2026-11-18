@@ -151,6 +151,24 @@ def get_document(case_id: str, index: int, user: dict = Depends(current_user)) -
                     headers={"Content-Disposition": f'attachment; filename="{f["name"]}"'})
 
 
+class MessageIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@app.post("/api/my/cases/{case_id}/messages")
+def write_to_bank(case_id: str, body: MessageIn, user: dict = Depends(current_user)) -> dict:
+    """The customer answers the specialist on the case itself; staff see it flagged in the Case Desk."""
+    case = backend.get("cases", case_id)
+    if not case or case["owner"] != user["uid"]:
+        raise HTTPException(404, "case not found")
+    if case["status"] == "resolved":
+        raise HTTPException(409, "This case is closed. Tell the assistant if the problem is back, and it will open a new case.")
+    cases.add_entry(case, "customer", redact(body.text), "customer")
+    backend.put("cases", case_id, case)
+    backend.publish("customer_message", case)
+    return cases.customer_view(case)
+
+
 @app.post("/dialogflow/webhook")
 async def dialogflow_webhook(request: Request) -> dict:
     """Dialogflow CX channel. CX callers are not signed in, so each CX session is its own customer id."""
@@ -172,6 +190,7 @@ class CaseUpdate(BaseModel):
     reply: str | None = Field(default=None, max_length=2000)
     note: str | None = Field(default=None, max_length=2000)
     urgency: Literal["high", "medium", "low"] | None = None  # staff override of the AI triage
+    assign: Literal["me", "nobody"] | None = None
     regulations: list[str] | None = Field(default=None, max_length=6)
 
 
@@ -180,6 +199,8 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(staff_user)
     case = backend.get("cases", case_id)
     if not case:
         raise HTTPException(404, "case not found")
+    if body.assign:
+        case["assignee"] = user["uid"] if body.assign == "me" else None
     if body.reply:
         cases.add_entry(case, "reply", redact(body.reply), "staff")
     if body.note:
@@ -240,6 +261,6 @@ def _page(name: str):
     return lambda: FileResponse(STATIC / name)
 
 
-for _path, _name in {"/": "index.html", "/app": "app.html", "/desk": "desk.html", "/insights": "insights.html",
-                     "/status": "status.html"}.items():
+for _path, _name in {"/": "index.html", "/app": "app.html", "/cases": "cases.html", "/desk": "desk.html",
+                     "/insights": "insights.html", "/status": "status.html"}.items():
     app.add_api_route(_path, _page(_name), methods=["GET"], include_in_schema=False)

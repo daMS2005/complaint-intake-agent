@@ -91,7 +91,7 @@ export async function header(requiredRole) {
   if (!user) return void (location.href = "/");
   if (requiredRole && user.role !== requiredRole) return void (location.href = home(user));
   const staff = user.role === "staff";
-  const links = staff ? [["/desk", "Case Desk"], ["/insights", "Insights"]] : [["/app", "My account"]];
+  const links = staff ? [["/desk", "Case Desk"], ["/insights", "Insights"]] : [["/app", "Assistant"], ["/cases", "My cases"]];
   document.querySelector("header").innerHTML = `
     <a class="brand" href="/">Northwind Resolve</a>
     <nav aria-label="Main">${links.map(([h, t]) => `<a href="${h}" ${location.pathname === h ? 'aria-current="page"' : ""}>${t}</a>`).join("")}</nav>

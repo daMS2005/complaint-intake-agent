@@ -31,8 +31,8 @@ controls a regulated business needs around it:
 
 | Role | Page | What they do there |
 |---|---|---|
-| Customer | **My account** (`/app`) | Chat with the assistant to ask about fees, disputes or their rights, or to report a problem. Attach statements to a case. Follow their cases and the bank's replies. |
-| Complaint specialist | **Case Desk** (`/desk`) | Work the queue of open cases, sorted by legal deadline. Check or overrule the AI triage, read attached documents, reply to the customer, add internal notes, change status. |
+| Customer | **Assistant** (`/app`) and **My cases** (`/cases`) | Chat with the assistant to ask about fees, disputes or their rights, or to report a problem. In My cases, follow each case against its deadline, read the bank's replies, write back, and attach statements. |
+| Complaint specialist | **Case Desk** (`/desk`) | Work the queue of open cases, sorted by legal deadline, with cases waiting on a reply flagged. Assign cases to yourself, check or overrule the AI triage, read attached documents, reply to the customer, add internal notes, change status. |
 | Operations or compliance lead | **Insights** (`/insights`) | See deadline risk at a glance, and ask an analyst agent about trends, risky cases, and how Northwind compares with the industry. |
 
 ### One complaint, end to end
@@ -47,7 +47,7 @@ controls a regulated business needs around it:
 3. **A specialist picks it up in the Case Desk.** Overdue and nearly-due cases are at the top. The
    specialist checks the AI triage (and can overrule it), opens the statement, replies to the customer,
    adds an internal note and moves the case to *in review*.
-4. **The customer sees the reply** under My account, or asks the assistant "where do my cases stand?".
+4. **The customer sees the reply** in My cases, where they can write back on the case, or asks the assistant "where do my cases stand?".
    The assistant can only read that customer's own cases.
 5. **The lead watches the trends** in Insights. For example "2 cases are past their legal deadline", or
    "compare our credit card complaints with the industry", answered from BigQuery's CFPB dataset.
@@ -59,7 +59,7 @@ bank's policy documents ([app/policies](app/policies/)) using embedding search.
 
 On the landing page, click **Continue as a customer**. This creates a private throwaway account. Report a
 problem, then use **Switch to staff view** in the header to work your own case in the Case Desk. Switch
-back to see the reply land in My account.
+back to see the reply land in My cases.
 
 ## The runtime check: Google Cloud or a local open-source stack
 

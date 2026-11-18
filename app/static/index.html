@@ -95,7 +95,7 @@
   const user = await me();
   if (user) {
     document.getElementById("signin").innerHTML = `<h2>You're signed in</h2>
-      <button class="primary" id="continue">${user.role === "staff" ? "Open the Case Desk" : "Open My account"}</button>`;
+      <button class="primary" id="continue">${user.role === "staff" ? "Open the Case Desk" : "Open the assistant"}</button>`;
     document.getElementById("continue").onclick = () => (location.href = home(user));
   } else {
     document.getElementById("as-customer").onclick = () => run(demoAccount, "customer");

@@ -98,3 +98,14 @@ def test_customer_attaches_document_only_owner_and_staff_can_read_it():
     get = f"/api/cases/{case['id']}/files/0"
     assert client.get(get, headers=as_user("agent4", "staff")).content == b"%PDF-1.4 demo"
     assert client.get(get, headers=as_user("mallory")).status_code == 404
+
+
+def test_customer_writes_on_own_open_case_and_staff_can_assign_it():
+    case = cases.open_case("fay", "Credit card", "Billing dispute", "Refund missing.", "medium", ["Reg Z"])
+    url = f"/api/my/cases/{case['id']}/messages"
+    seen = client.post(url, json={"text": "Receipt attached, card 4111111111111111"}, headers=as_user("fay")).json()
+    assert seen["timeline"][-1] == {**seen["timeline"][-1], "kind": "customer", "text": "Receipt attached, card [REDACTED]"}
+    assert client.post(url, json={"text": "hi"}, headers=as_user("mallory")).status_code == 404
+    staff = as_user("agent5", "staff")
+    assert client.patch(f"/api/cases/{case['id']}", json={"assign": "me", "status": "resolved"}, headers=staff).json()["assignee"] == "agent5"
+    assert client.post(url, json={"text": "still wrong"}, headers=as_user("fay")).status_code == 409

@@ -49,11 +49,11 @@ def open_case(owner: str, product: str, issue: str, summary: str, urgency: str, 
     return case
 
 
-CUSTOMER_KINDS = ("status", "reply", "file")  # "note" and "triage" entries are staff-only
+CUSTOMER_KINDS = ("status", "reply", "file", "customer")  # "note" and "triage" entries are staff-only
 
 
 def add_entry(case: dict, kind: str, text: str, by: str) -> None:
-    """kind: "reply", "status" and "file" are shown to the customer; "note" and "triage" are staff-only."""
+    """kind: "reply", "customer", "status" and "file" are shown to the customer; "note" and "triage" are staff-only."""
     case["timeline"].append({"at": iso(now()), "kind": kind, "by": by, "text": text})
 
 
@@ -74,12 +74,12 @@ def cases_of(owner: str) -> list[dict]:
 
 def seed_if_empty() -> None:
     """Demo cases from other (fictional) customers so the Case Desk and Insights have data on first run."""
-    if backend.find("cases"):
+    if backend.find("cases", seed=True):
         return
     for s in json.loads((pathlib.Path(__file__).parent / "data" / "seed_cases.json").read_text()):
         created = now() - datetime.timedelta(days=s["days_ago"], hours=3)
         case = open_case(f"seed-customer-{s['id'][-2:]}", s["product"], s["issue"], s["summary"], s["urgency"],
-                         s["regulations"], created, notify=False)
+                         s["regulations"], created, notify=False) | {"seed": True}
         if s["status"] != "new":
             case["status"] = s["status"]
             case["timeline"].append({"at": iso(created + datetime.timedelta(hours=5)), "kind": "reply", "by": "staff",

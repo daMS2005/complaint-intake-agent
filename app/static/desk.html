@@ -18,6 +18,7 @@
   tbody tr:hover td { background: var(--surface); }
   tbody tr[aria-selected="true"] td { background: var(--green-soft); }
   td .issue { font-weight: 600; }
+  .tag { font-size: 12px; font-weight: 600; color: var(--green); margin-top: 4px; }
   #detail { border-left: 1px solid var(--line); padding: 0 0 0 28px; align-self: start; position: sticky; top: 16px; display: grid; gap: 16px; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
   dt { color: var(--muted); } dd { margin: 0; }
@@ -33,6 +34,7 @@
     <h2 id="queue-title" class="muted small" hidden>Case queue</h2>
     <div class="bar">
       <label>Show <select id="show"><option value="open">Open cases</option><option value="resolved">Resolved cases</option><option value="all">All cases</option></select></label>
+      <label>Assigned <select id="assigned"><option value="">Anyone</option><option value="me">To me</option><option value="nobody">Nobody</option></select></label>
       <label>Urgency <select id="urgency"><option value="">Any</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
       <button id="refresh">Refresh</button>
       <span id="count" aria-live="polite"></span>
@@ -49,22 +51,27 @@
 </main>
 <script type="module">
   import { STATUS, api, clock, day, docs, esc, header, status, wireDownloads } from "/static/client.js";
-  await header("staff");
+  const me = await header("staff");
   let cases = [], selected = null;
+  const wroteLast = c => c.timeline.at(-1)?.by === "customer" && c.status !== "resolved";
+  const owner = c => (!c.assignee ? "Nobody" : c.assignee === me.uid ? "You" : "Another specialist");
   const URGENCY = { high: "High", medium: "Medium", low: "Low" };
 
   async function load() { cases = await api("/api/cases"); render(); if (selected) detail(); }
 
   function render() {
     const show = document.getElementById("show").value, urgency = document.getElementById("urgency").value;
+    const assigned = document.getElementById("assigned").value;
     const shown = cases
-      .filter(c => (show === "all" || (show === "open") === (c.status !== "resolved")) && (!urgency || c.urgency === urgency))
+      .filter(c => (show === "all" || (show === "open") === (c.status !== "resolved")) && (!urgency || c.urgency === urgency)
+        && (!assigned || (assigned === "me" ? c.assignee === me.uid : !c.assignee)))
       .sort((a, b) => (show === "open" ? a.due.localeCompare(b.due) : b.created.localeCompare(a.created)));
     document.getElementById("count").textContent = `${shown.length} ${shown.length === 1 ? "case" : "cases"}`;
     document.getElementById("rows").innerHTML = shown.length ? shown.map(c => `
       <tr tabindex="0" data-id="${esc(c.id)}" aria-selected="${c.id === selected}">
         <td>${clock(c)}</td>
-        <td><div class="issue">${esc(c.issue)}</div><div class="muted small num">${esc(c.id)}</div></td>
+        <td><div class="issue">${esc(c.issue)}</div><div class="muted small num">${esc(c.id)}${c.assignee === me.uid ? ", assigned to you" : ""}</div>
+          ${wroteLast(c) ? '<div class="tag">Customer wrote, waiting for you</div>' : ""}</td>
         <td class="small">${esc(c.product)}</td>
         <td class="small ${c.urgency === "high" ? "urgency-high" : ""}">${URGENCY[c.urgency] ?? esc(c.urgency)}</td>
         <td>${status(c.status)}</td>
@@ -79,7 +86,7 @@
 
   function detail() {
     const c = cases.find(x => x.id === selected); if (!c) return;
-    const kind = { reply: "Reply to customer", note: "Internal note", status: "Update", triage: "Triage changed", file: "Document" };
+    const kind = { reply: "Reply to customer", note: "Internal note", status: "Update", triage: "Triage changed", file: "Document", customer: "Customer wrote" };
     const ai = c.triage ? `${URGENCY[c.triage.urgency] ?? esc(c.triage.urgency)} urgency, ${esc(c.triage.regulations.join(", ") || "no rules")}, by ${esc(c.triage.model)}` : "Not recorded";
     document.getElementById("detail").innerHTML = `
       <div><h2>${esc(c.issue)}</h2>${clock(c)}</div>
@@ -91,6 +98,7 @@
         <dt>Rules</dt><dd>${esc(c.regulations.join(", ") || "None flagged")}</dd>
         <dt>AI triage</dt><dd>${ai}</dd>
         <dt>Status</dt><dd>${status(c.status)}</dd>
+        <dt>Assigned</dt><dd>${owner(c)} <button type="button" class="link" id="assign">${c.assignee === me.uid ? "Unassign" : "Assign to me"}</button></dd>
       </dl>
       <p style="margin:0">${esc(c.summary)}</p>
       ${docs(c)}
@@ -108,6 +116,10 @@
         <p id="saved" role="status"></p>
       </form>`;
     wireDownloads(document.getElementById("detail"));
+    document.getElementById("assign").onclick = async () => {
+      Object.assign(c, await api(`/api/cases/${encodeURIComponent(c.id)}`, { method: "PATCH", body: JSON.stringify({ assign: c.assignee === me.uid ? "nobody" : "me" }) }));
+      render(); detail();
+    };
     document.getElementById("work").onsubmit = async e => {
       e.preventDefault();
       const v = id => document.getElementById(id).value.trim() || null;
@@ -129,7 +141,7 @@
     };
   }
 
-  document.getElementById("show").onchange = document.getElementById("urgency").onchange = render;
+  document.getElementById("show").onchange = document.getElementById("urgency").onchange = document.getElementById("assigned").onchange = render;
   document.getElementById("refresh").onclick = load;
   load();
 </script>

@@ -59,6 +59,7 @@ textarea { min-height: 72px; resize: vertical; }
 .clock i::after { content: ""; display: block; height: 100%; width: var(--used); background: var(--green); }
 .clock.soon b { color: var(--amber); } .clock.soon i::after { background: var(--amber); }
 .clock.late b { color: var(--red); } .clock.late i::after { background: var(--red); }
+.small-clock { min-width: 96px; } .small-clock b { font-size: 15px; }
 .clock.done b { color: var(--muted); font-size: 16px; } .clock.done i { display: none; }
 
 /* Chat */
