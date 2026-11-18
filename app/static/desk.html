@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northwind Case Desk</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  main { max-width:1200px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0, 1fr) 360px; gap:16px; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .filters span { color:var(--muted); font-size:13px; margin-left:auto; }
+  .table { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; }
+  td.issue { white-space:normal; min-width:180px; }
+  tr.row { cursor:pointer; } tr.row:hover, tr.sel { background:var(--panel); }
+  aside { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; align-self:start; display:flex; flex-direction:column; gap:10px; }
+  aside h2 { font-size:16px; margin:0; } aside .muted { color:var(--muted); font-size:13px; }
+  .notes div { border-top:1px solid var(--line); padding:6px 0; font-size:13px; }
+  textarea { width:100%; min-height:70px; }
+</style>
+</head>
+<body>
+<header></header>
+<main>
+  <section>
+    <p class="note">Case Desk for compliance and operations staff. Cases filed by the customer assistant appear here. Open for this demo; in production it would sit behind Google sign-in.</p>
+    <div class="filters">
+      <select id="fu"><option value="">All urgencies</option><option>high</option><option>medium</option><option>low</option></select>
+      <select id="fs"><option value="">All statuses</option><option value="new">new</option><option value="in_review">in review</option><option value="resolved">resolved</option></select>
+      <button id="refresh">Refresh</button>
+      <span id="count"></span>
+    </div>
+    <div class="table"><table>
+      <thead><tr><th>Filed</th><th>Case</th><th>Product</th><th>Issue</th><th>Urgency</th><th>Rules</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+  <aside id="detail"><p class="muted">Select a case to see details, change its status, or add a note.</p></aside>
+</main>
+<script src="/static/nav.js"></script>
+<script>
+  let cases = [], selected = null;
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const when = iso => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  async function load() { cases = await (await fetch("/api/cases")).json(); render(); }
+  function render() {
+    const fu = document.getElementById("fu").value, fs = document.getElementById("fs").value;
+    const shown = cases.filter(c => (!fu || c.urgency === fu) && (!fs || c.status === fs));
+    document.getElementById("count").textContent = `${shown.length} of ${cases.length} cases`;
+    document.getElementById("rows").innerHTML = shown.map(c => `
+      <tr class="row ${c.id === selected ? "sel" : ""}" data-id="${esc(c.id)}">
+        <td>${when(c.created)}</td><td>${esc(c.id)}</td><td>${esc(c.product)}</td><td class="issue">${esc(c.issue)}</td>
+        <td><span class="pill ${esc(c.urgency)}">${esc(c.urgency)}</span></td><td>${esc((c.regulations || []).join(", "))}</td>
+        <td>${esc(c.status.replace("_", " "))}</td></tr>`).join("");
+    document.querySelectorAll("tr.row").forEach(r => r.onclick = () => { selected = r.dataset.id; render(); detail(); });
+  }
+  function detail() {
+    const c = cases.find(x => x.id === selected); if (!c) return;
+    document.getElementById("detail").innerHTML = `
+      <h2>${esc(c.id)} · ${esc(c.issue)}</h2>
+      <div class="muted">${esc(c.product)} · filed ${new Date(c.created).toLocaleString()} · <span class="pill ${esc(c.urgency)}">${esc(c.urgency)}</span></div>
+      <div>${esc(c.summary)}</div>
+      <div class="muted">Possible rules: ${esc((c.regulations || []).join(", ") || "none")}</div>
+      <label class="muted">Status <select id="st">${["new", "in_review", "resolved"].map(s => `<option value="${s}" ${s === c.status ? "selected" : ""}>${s.replace("_", " ")}</option>`).join("")}</select></label>
+      <textarea id="nt" maxlength="1000" placeholder="Add an internal note…"></textarea>
+      <button class="primary" id="save">Save</button>
+      <div class="notes">${(c.notes || []).map(n => `<div><span class="muted">${new Date(n.at).toLocaleString()}</span><br>${esc(n.text)}</div>`).join("") || '<span class="muted">No notes yet.</span>'}</div>`;
+    document.getElementById("save").onclick = async () => {
+      const body = { status: document.getElementById("st").value, note: document.getElementById("nt").value.trim() || null };
+      const r = await fetch(`/api/cases/${encodeURIComponent(c.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (r.ok) { Object.assign(c, await r.json()); render(); detail(); }
+    };
+  }
+  document.getElementById("fu").onchange = document.getElementById("fs").onchange = render;
+  document.getElementById("refresh").onclick = load;
+  load();
+</script>
+</body>
+</html>
