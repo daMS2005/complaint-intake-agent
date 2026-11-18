@@ -28,5 +28,6 @@ resource "google_monitoring_alert_policy" "escalation" {
 
   alert_strategy {
     notification_rate_limit { period = "300s" }
+    auto_close = "1800s" # each escalation is its own event; don't leave incidents open for days
   }
 }
