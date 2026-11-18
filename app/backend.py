@@ -55,6 +55,8 @@ def vertex_enabled() -> tuple[bool, str | None]:
 
 
 GCP, PROJECT = vertex_enabled()
+if os.getenv("K_SERVICE") and not GCP and not os.getenv("FORCE_LOCAL"):  # on Cloud Run there is no local stack
+    raise SystemExit("Vertex AI check failed on Cloud Run; exiting so the instance restarts and checks again")
 FIRESTORE_DB = os.getenv("FIRESTORE_DATABASE") if GCP else None
 TOPIC = os.getenv("EVENTS_TOPIC") if GCP else None  # projects/<p>/topics/<t>
 WEB_API_KEY = os.getenv("WEB_API_KEY") if GCP else None  # browser key for Identity Platform sign-in
@@ -103,6 +105,17 @@ def verify_token(token: str) -> str | None:
         except Exception:
             return None
     return token.removeprefix("dev:") if token.startswith("dev:") and len(token) < 80 else None
+
+
+def verify_dialogflow(token: str) -> bool:
+    """On GCP, the webhook only accepts this project's Dialogflow service agent (a Google-signed ID token)."""
+    if not GCP:
+        return True  # the local stack has no Dialogflow; tests call the webhook directly
+    agent = os.getenv("DIALOGFLOW_AGENT")  # service-<project number>@gcp-sa-dialogflow.iam.gserviceaccount.com
+    try:
+        return bool(agent) and id_token.verify_oauth2_token(token, Request()).get("email") == agent
+    except Exception:
+        return False
 
 
 @functools.cache

@@ -79,7 +79,7 @@ def search_policies(question: str) -> dict:
 
 # ---- analyst tools ----
 
-def case_breakdown(field: str, days: int = 30) -> dict:
+def case_breakdown(field: str, tool_context: ToolContext, days: int = 30) -> dict:
     """Counts Northwind cases opened in the last `days` days, grouped by a field.
 
     Args:
@@ -87,17 +87,18 @@ def case_breakdown(field: str, days: int = 30) -> dict:
         days: Look-back window in days.
     """
     since = cases.iso(cases.now() - datetime.timedelta(days=days))
-    recent = [c for c in cases.all_cases() if c["created"] >= since]
+    recent = [c for c in cases.desk_cases(tool_context.user_id) if c["created"] >= since]
     values = [v for c in recent for v in (c.get(field) if isinstance(c.get(field), list) else [c.get(field)])]
     return {"cases": len(recent), "days": days, "counts": dict(collections.Counter(values).most_common())}
 
 
-def find_cases(urgency: str = "", status: str = "", product: str = "", overdue_only: bool = False) -> dict:
+def find_cases(tool_context: ToolContext, urgency: str = "", status: str = "", product: str = "",
+               overdue_only: bool = False) -> dict:
     """Lists up to 15 Northwind cases, newest first. Filters: urgency ("high", "medium", "low"), status ("new",
     "in_review", "resolved"), a product keyword, and overdue_only (open cases past their response deadline).
     Empty filters match everything."""
     t = cases.iso(cases.now())
-    hits = [c for c in cases.all_cases()
+    hits = [c for c in cases.desk_cases(tool_context.user_id)
             if (not urgency or c["urgency"] == urgency) and (not status or c["status"] == status)
             and product.lower() in c["product"].lower()
             and (not overdue_only or (c["status"] != "resolved" and c["due"] < t))]

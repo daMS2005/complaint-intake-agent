@@ -130,8 +130,11 @@ sides. Only the adapter in [app/backend.py](app/backend.py) changes. `FORCE_LOCA
 - **Staff-only entries stay with staff.** Internal notes and triage overrides are stripped from the
   customer's view of a case.
 - **Card numbers and SSNs are redacted** before text reaches a model, storage or a staff note.
+- **Only Dialogflow can call the CX webhook.** Dialogflow sends a Google-signed ID token, and the app accepts
+  only this project's Dialogflow service agent.
 - **Demo shortcut:** "Switch to staff view" lets any signed-in visitor switch roles so both sides can be
-  tried. In production an administrator would grant the staff role, and staff would sign in with the
+  tried. Demo staff see the sample cases and their own, never another visitor's. In production an
+  administrator would grant the staff role, staff would see every case, and they would sign in with the
   bank's workforce identity.
 
 ## Architecture on Google Cloud
@@ -206,7 +209,9 @@ Tests: `.venv/bin/pip install pytest httpx && .venv/bin/python -m pytest -q`
 
 ## Known limits
 
-- **The role switch is a demo affordance**, not access control you would ship.
+- **The role switch is a demo affordance**, not access control you would ship. Cases filed through Dialogflow CX
+  aren't on the demo Case Desk, because no visitor owns them.
+- **Sample cases are rewritten once a day**, so their deadlines stay current; changes made to them don't last.
 - **ADK sessions are in memory**, with Cloud Run pinned to one instance. Production would use
   `VertexAiSessionService` or a database session store.
 - **The BigQuery CFPB dataset ends in March 2023.** The bundled local sample is newer (Nov 2025 to

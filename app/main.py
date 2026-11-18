@@ -1,7 +1,7 @@
 """Northwind Resolve: complaint handling for a retail bank.
 
 Customers sign in, talk to the assistant and follow their cases. Staff work the case queue against legal
-deadlines and ask the analyst about trends. Every /api route checks the caller's sign-in and role.
+deadlines and ask the analyst about trends. Every /api route except /api/config checks sign-in and role.
 """
 import collections
 import datetime
@@ -29,7 +29,7 @@ customer_runner = Runner(app_name="customer", agent=agent.customer_agent, sessio
                          auto_create_session=True)
 analyst_runner = Runner(app_name="analyst", agent=agent.analyst_agent, session_service=sessions,
                         auto_create_session=True)
-cases.seed_if_empty()
+cases.refresh_seeds()
 
 # Card numbers (13-19 digits, optional separators) and SSNs never reach a model, storage or a staff note.
 PII = re.compile(r"\b(?:\d[ -]?){12,18}\d\b|\b\d{3}-\d{2}-\d{4}\b")
@@ -120,6 +120,8 @@ async def add_document(case_id: str, request: Request, name: str = Query(max_len
     case = backend.get("cases", case_id)
     if not case or case["owner"] != user["uid"]:
         raise HTTPException(404, "case not found")
+    if case["status"] == "resolved":
+        raise HTTPException(409, "This case is closed.")
     content_type = request.headers.get("content-type", "")
     if content_type not in DOCUMENT_TYPES:
         raise HTTPException(415, "Upload a PDF, PNG or JPEG.")
@@ -128,7 +130,7 @@ async def add_document(case_id: str, request: Request, name: str = Query(max_len
     data = await request.body()
     if not data or len(data) > 5_000_000:
         raise HTTPException(413, "Documents can be up to 5 MB.")
-    safe = re.sub(r"[^\w.\- ]", "_", name).strip()[:80] or "document"
+    safe = re.sub(r"[^\w.\- ]", "_", name, flags=re.ASCII).strip()[:80] or "document"
     path = f"cases/{case_id}/{uuid.uuid4().hex[:8]}-{safe}"
     backend.put_file(path, data, content_type)
     case.setdefault("files", []).append({"name": safe, "path": path, "type": content_type, "size": len(data),
@@ -141,7 +143,7 @@ async def add_document(case_id: str, request: Request, name: str = Query(max_len
 @app.get("/api/cases/{case_id}/files/{index}")
 def get_document(case_id: str, index: int, user: dict = Depends(current_user)) -> Response:
     case = backend.get("cases", case_id)
-    if not case or (user["role"] != "staff" and case["owner"] != user["uid"]):
+    if not case or not (cases.on_desk(case, user["uid"]) if user["role"] == "staff" else case["owner"] == user["uid"]):
         raise HTTPException(404, "case not found")
     files = case.get("files", [])
     if not 0 <= index < len(files):
@@ -170,11 +172,16 @@ def write_to_bank(case_id: str, body: MessageIn, user: dict = Depends(current_us
 
 
 @app.post("/dialogflow/webhook")
-async def dialogflow_webhook(request: Request) -> dict:
+async def dialogflow_webhook(request: Request, authorization: str = Header("")) -> dict:
     """Dialogflow CX channel. CX callers are not signed in, so each CX session is its own customer id."""
+    if not backend.verify_dialogflow(authorization.removeprefix("Bearer ")):
+        raise HTTPException(401, "Dialogflow only")
     req = await request.json()
-    session_id = req["sessionInfo"]["session"].rsplit("/", 1)[-1]
-    reply = await ask(customer_runner, f"cx-{session_id}", session_id, req.get("text") or req.get("transcript") or "hello")
+    session_id = str(req.get("sessionInfo", {}).get("session", "")).rsplit("/", 1)[-1][:64]
+    if not session_id:
+        raise HTTPException(400, "sessionInfo.session missing")
+    text = str(req.get("text") or req.get("transcript") or "hello")[:2000]
+    reply = await ask(customer_runner, f"cx-{session_id}", session_id, text)
     return {"fulfillmentResponse": {"messages": [{"text": {"text": [reply]}}]}}
 
 
@@ -182,7 +189,7 @@ async def dialogflow_webhook(request: Request) -> dict:
 
 @app.get("/api/cases")
 def list_cases(user: dict = Depends(staff_user)) -> list[dict]:
-    return cases.all_cases()
+    return cases.desk_cases(user["uid"])
 
 
 class CaseUpdate(BaseModel):
@@ -197,7 +204,7 @@ class CaseUpdate(BaseModel):
 @app.patch("/api/cases/{case_id}")
 def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(staff_user)) -> dict:
     case = backend.get("cases", case_id)
-    if not case:
+    if not case or not cases.on_desk(case, user["uid"]):
         raise HTTPException(404, "case not found")
     if body.assign:
         case["assignee"] = user["uid"] if body.assign == "me" else None
@@ -226,7 +233,7 @@ def update_case(case_id: str, body: CaseUpdate, user: dict = Depends(staff_user)
 @app.get("/api/stats")
 def stats(user: dict = Depends(staff_user)) -> dict:
     t, soon = cases.now(), cases.iso(cases.now() + datetime.timedelta(days=2))
-    open_cases = [c for c in cases.all_cases() if c["status"] != "resolved"]
+    open_cases = [c for c in cases.desk_cases(user["uid"]) if c["status"] != "resolved"]
     return {
         "open": len(open_cases),
         "overdue": sum(c["due"] < cases.iso(t) for c in open_cases),

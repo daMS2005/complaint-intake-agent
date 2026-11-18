@@ -56,8 +56,11 @@
   document.getElementById("steps").innerHTML = h.check.steps.map(s =>
     `<li><span class="${s.ok ? "pass" : "fail"}">${s.ok ? "Passed" : "Failed"}</span>: ${esc(s.name)} <span>(${esc(s.detail)})</span></li>`).join("");
   const rows = [
-    ["Language model (agents)", "Gemini 3.5 Flash on Vertex AI", openai ? `OpenAI ${esc(h.model)}` : "Qwen3 4B Instruct on Ollama"],
-    ["Embeddings (policy search)", "gemini-embedding-001 on Vertex AI", openai ? `OpenAI ${esc(h.embeddings)}` : "EmbeddingGemma on Ollama"],
+    // the side in use names the exact models it runs; the other side shows the defaults
+    ["Language model (agents)", gcp ? `${esc(h.model)} on Vertex AI` : "Gemini 3.5 Flash on Vertex AI",
+      gcp ? "Qwen3 4B Instruct on Ollama" : openai ? `OpenAI ${esc(h.model)}` : `${esc(h.model)} on Ollama`],
+    ["Embeddings (policy search)", gcp ? `${esc(h.embeddings)} on Vertex AI` : "gemini-embedding-001 on Vertex AI",
+      gcp ? "EmbeddingGemma on Ollama" : openai ? `OpenAI ${esc(h.embeddings)}` : `${esc(h.embeddings)} on Ollama`],
     ["Sign-in", "Identity Platform", "Developer sign-in"],
     ["Cases and users", "Firestore", "SQLite"],
     ["Customer documents", "Cloud Storage", "Local folder"],

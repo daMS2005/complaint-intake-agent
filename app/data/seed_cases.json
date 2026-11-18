@@ -9,8 +9,7 @@
    "Reg E"
   ],
   "status": "in_review",
-  "days_ago": 1,
-  "notes": []
+  "days_ago": 1
  },
  {
   "id": "C-SEED0002",
@@ -22,8 +21,7 @@
    "Reg E"
   ],
   "status": "new",
-  "days_ago": 16,
-  "notes": []
+  "days_ago": 16
  },
  {
   "id": "C-SEED0003",
@@ -35,8 +33,7 @@
    "Reg Z"
   ],
   "status": "new",
-  "days_ago": 3,
-  "notes": []
+  "days_ago": 3
  },
  {
   "id": "C-SEED0004",
@@ -49,8 +46,7 @@
    "Reg X"
   ],
   "status": "in_review",
-  "days_ago": 4,
-  "notes": []
+  "days_ago": 4
  },
  {
   "id": "C-SEED0005",
@@ -62,8 +58,7 @@
    "FDCPA"
   ],
   "status": "new",
-  "days_ago": 5,
-  "notes": []
+  "days_ago": 5
  },
  {
   "id": "C-SEED0006",
@@ -75,8 +70,7 @@
    "FCRA"
   ],
   "status": "resolved",
-  "days_ago": 8,
-  "notes": []
+  "days_ago": 8
  },
  {
   "id": "C-SEED0007",
@@ -88,8 +82,7 @@
    "Reg Z"
   ],
   "status": "resolved",
-  "days_ago": 12,
-  "notes": []
+  "days_ago": 12
  },
  {
   "id": "C-SEED0008",
@@ -101,8 +94,7 @@
    "Reg E"
   ],
   "status": "new",
-  "days_ago": 0,
-  "notes": []
+  "days_ago": 0
  },
  {
   "id": "C-SEED0009",
@@ -114,8 +106,7 @@
    "UDAAP"
   ],
   "status": "in_review",
-  "days_ago": 6,
-  "notes": []
+  "days_ago": 6
  },
  {
   "id": "C-SEED0010",
@@ -127,8 +118,7 @@
    "TILA"
   ],
   "status": "new",
-  "days_ago": 9,
-  "notes": []
+  "days_ago": 9
  },
  {
   "id": "C-SEED0011",
@@ -141,8 +131,7 @@
    "UDAAP"
   ],
   "status": "resolved",
-  "days_ago": 15,
-  "notes": []
+  "days_ago": 15
  },
  {
   "id": "C-SEED0012",
@@ -154,8 +143,7 @@
    "Reg Z"
   ],
   "status": "resolved",
-  "days_ago": 20,
-  "notes": []
+  "days_ago": 20
  },
  {
   "id": "C-SEED0013",
@@ -167,8 +155,7 @@
    "RESPA"
   ],
   "status": "new",
-  "days_ago": 18,
-  "notes": []
+  "days_ago": 18
  },
  {
   "id": "C-SEED0014",
@@ -180,8 +167,7 @@
    "FCRA"
   ],
   "status": "in_review",
-  "days_ago": 10,
-  "notes": []
+  "days_ago": 10
  },
  {
   "id": "C-SEED0015",
@@ -193,8 +179,7 @@
    "Reg CC"
   ],
   "status": "new",
-  "days_ago": 3,
-  "notes": []
+  "days_ago": 3
  },
  {
   "id": "C-SEED0016",
@@ -207,7 +192,6 @@
    "FCRA"
   ],
   "status": "resolved",
-  "days_ago": 25,
-  "notes": []
+  "days_ago": 25
  }
 ]

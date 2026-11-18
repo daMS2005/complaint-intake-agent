@@ -2,6 +2,7 @@
 import datetime
 import json
 import pathlib
+import re
 import uuid
 
 from . import backend
@@ -27,7 +28,7 @@ def add_business_days(start: datetime.datetime, days: int) -> datetime.datetime:
 def deadline(created: datetime.datetime, regulations: list[str]) -> datetime.datetime:
     """Reg E errors must be investigated within 10 business days (or provisionally credited); everything
     else gets the 15-day response the CFPB expects for complaints."""
-    if any(r.replace(" ", "").lower() == "rege" for r in regulations):
+    if any(re.fullmatch(r"reg(ulation)?e", re.sub(r"[\s.]", "", r.lower())) for r in regulations):
         return add_business_days(created, 10)
     return created + datetime.timedelta(days=15)
 
@@ -64,22 +65,29 @@ def customer_view(case: dict) -> dict:
                                            "timeline": [e for e in case["timeline"] if e["kind"] in CUSTOMER_KINDS]}
 
 
-def all_cases() -> list[dict]:
-    return sorted(backend.find("cases"), key=lambda c: c["created"], reverse=True)
+def on_desk(case: dict, staff_uid: str) -> bool:
+    """Demo staff see the sample cases and their own, never another visitor's."""
+    return bool(case.get("seed")) or case["owner"] == staff_uid
+
+
+def desk_cases(staff_uid: str) -> list[dict]:
+    return sorted((c for c in backend.find("cases") if on_desk(c, staff_uid)), key=lambda c: c["created"], reverse=True)
 
 
 def cases_of(owner: str) -> list[dict]:
     return sorted(backend.find("cases", owner=owner), key=lambda c: c["created"], reverse=True)
 
 
-def seed_if_empty() -> None:
-    """Demo cases from other (fictional) customers so the Case Desk and Insights have data on first run."""
-    if backend.find("cases", seed=True):
+def refresh_seeds() -> None:
+    """Demo cases from other (fictional) customers so the Case Desk and Insights have data. Rewritten once a day,
+    so their deadlines stay current on a long-running demo."""
+    seeds = backend.find("cases", seed=True)
+    if seeds and min(c.get("seeded", "") for c in seeds) > iso(now() - datetime.timedelta(days=1)):
         return
     for s in json.loads((pathlib.Path(__file__).parent / "data" / "seed_cases.json").read_text()):
         created = now() - datetime.timedelta(days=s["days_ago"], hours=3)
         case = open_case(f"seed-customer-{s['id'][-2:]}", s["product"], s["issue"], s["summary"], s["urgency"],
-                         s["regulations"], created, notify=False) | {"seed": True}
+                         s["regulations"], created, notify=False) | {"id": s["id"], "seed": True, "seeded": iso(now())}
         if s["status"] != "new":
             case["status"] = s["status"]
             case["timeline"].append({"at": iso(created + datetime.timedelta(hours=5)), "kind": "reply", "by": "staff",

@@ -13,7 +13,8 @@ resource "google_dialogflow_cx_webhook" "adk" {
   display_name = "adk-agent"
   timeout      = "30s" # default 5s is too short for an LLM turn with a tool call
   generic_web_service {
-    uri = "${google_cloud_run_v2_service.app.uri}/dialogflow/webhook"
+    uri                = "${google_cloud_run_v2_service.app.uri}/dialogflow/webhook"
+    service_agent_auth = "ID_TOKEN" # Google-signed token the app checks, so only this agent can call it
   }
 }
 

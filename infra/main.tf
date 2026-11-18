@@ -101,6 +101,10 @@ resource "google_cloud_run_v2_service" "app" {
         value = google_storage_bucket.evidence.name
       }
       env {
+        name  = "DIALOGFLOW_AGENT" # the only caller /dialogflow/webhook accepts
+        value = "service-${data.google_project.this.number}@gcp-sa-dialogflow.iam.gserviceaccount.com"
+      }
+      env {
         name  = "WEB_API_KEY" # public browser key, restricted to the sign-in APIs
         value = google_apikeys_key.web.key_string
       }

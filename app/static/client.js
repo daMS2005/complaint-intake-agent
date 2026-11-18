@@ -20,11 +20,10 @@ export const status = s => `<span class="status ${esc(s)}">${STATUS[s] ?? esc(s)
 export function clock(c) {
   if (c.status === "resolved") return `<div class="clock done"><b>Resolved</b><span>deadline was ${day(c.due)}</span></div>`;
   const start = new Date(c.created), due = new Date(c.due), now = Date.now();
-  const days = Math.ceil((due - now) / 864e5);
+  const days = Math.ceil(Math.abs(due - now) / 864e5), unit = days === 1 ? "day" : "days";
   const used = Math.min(100, Math.max(0, ((now - start) / (due - start)) * 100));
-  const [cls, big, small] = days < 0 ? ["late", `${-days} ${-days === 1 ? "day" : "days"}`, `overdue since ${day(c.due)}`]
-    : days === 0 ? ["late", "Today", "deadline"]
-    : [days <= 2 ? "soon" : "", `${days} ${days === 1 ? "day" : "days"}`, `left, due ${day(c.due)}`];
+  const [cls, big, small] = due < now ? ["late", `${days} ${unit}`, `overdue since ${day(c.due)}`]
+    : [days <= 2 ? "soon" : "", `${days} ${unit}`, `left, due ${day(c.due)}`];
   return `<div class="clock ${cls}" style="--used:${used.toFixed(0)}%"><b>${big}</b><span>${small}</span><i></i></div>`;
 }
 
@@ -39,7 +38,7 @@ export async function signIn(email, password, create) {
   localStorage.setItem("nw-dev-uid", email.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 60));
 }
 
-// A throwaway account per visitor, so demo users never see each other's cases.
+// A throwaway account per visitor. Even in the staff view, visitors only see the sample cases and their own.
 export const demoAccount = () => signIn(`demo-${crypto.randomUUID().slice(0, 12)}@example.com`, crypto.randomUUID(), true);
 
 export async function signOut() {

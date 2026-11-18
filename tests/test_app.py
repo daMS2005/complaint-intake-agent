@@ -46,6 +46,7 @@ def test_filed_case_belongs_to_customer_with_reg_e_deadline_and_escalates():
     case = backend.get("cases", result["case_id"])
     opened = datetime.datetime.fromisoformat(case["created"])
     assert case["owner"] == "alice" and case["due"] == cases.iso(cases.add_business_days(opened, 10))
+    assert cases.deadline(opened, ["Regulation E"]) == cases.add_business_days(opened, 10)
     assert last_event() == {"event": "escalated", "case": case}
     assert [c["id"] for c in client.get("/api/my/cases", headers=as_user("alice")).json()] == [case["id"]]
     assert client.get("/api/my/cases", headers=as_user("bob")).json() == []
@@ -54,7 +55,7 @@ def test_filed_case_belongs_to_customer_with_reg_e_deadline_and_escalates():
 def test_staff_reply_reaches_customer_but_internal_note_does_not():
     case = cases.open_case("carol", "Credit card", "Billing dispute", "Refund missing.", "medium", ["Reg Z"])
     body = {"status": "resolved", "reply": "Refunded.", "note": "Card 4111111111111111 checked"}
-    updated = client.patch(f"/api/cases/{case['id']}", json=body, headers=as_user("agent2", "staff")).json()
+    updated = client.patch(f"/api/cases/{case['id']}", json=body, headers=as_user("carol", "staff")).json()
     assert updated["timeline"][-2]["text"] == "Card [REDACTED] checked"
     assert last_event()["event"] == "status_changed"
     seen = client.get("/api/my/cases", headers=as_user("carol")).json()[0]["timeline"]
@@ -62,7 +63,7 @@ def test_staff_reply_reaches_customer_but_internal_note_does_not():
 
 
 def test_analyst_tools_use_cases_and_cfpb_sample():
-    assert agent.case_breakdown("urgency", days=60)["cases"] >= 16
+    assert agent.case_breakdown("urgency", SimpleNamespace(user_id="agent1"), days=60)["cases"] >= 16
     top = agent.industry_breakdown("credit card", "issue")
     assert top["top"][0]["complaints"] > 0 and "sample" in top["source"]
 
@@ -79,7 +80,7 @@ def test_dialogflow_webhook_returns_fulfillment(monkeypatch):
 def test_staff_override_of_ai_triage_is_logged_recomputes_deadline_and_stays_internal():
     case = cases.open_case("dave", "Checking or savings account", "Fee dispute", "Charged twice.", "low", [])
     body = {"urgency": "high", "regulations": ["Reg E"]}
-    updated = client.patch(f"/api/cases/{case['id']}", json=body, headers=as_user("agent3", "staff")).json()
+    updated = client.patch(f"/api/cases/{case['id']}", json=body, headers=as_user("dave", "staff")).json()
     opened = datetime.datetime.fromisoformat(case["created"])
     assert updated["urgency"] == "high" and updated["triage"]["urgency"] == "low"
     assert updated["due"] == cases.iso(cases.add_business_days(opened, 10))
@@ -88,16 +89,19 @@ def test_staff_override_of_ai_triage_is_logged_recomputes_deadline_and_stays_int
     assert [e["kind"] for e in seen] == ["status"]
 
 
-def test_customer_attaches_document_only_owner_and_staff_can_read_it():
+def test_customer_attaches_document_and_other_visitors_cannot_read_it_even_as_staff():
     case = cases.open_case("erin", "Mortgage", "Payment not credited", "Paid in full.", "high", ["RESPA"])
     url = f"/api/my/cases/{case['id']}/files?name=statement.pdf"
     pdf = {**as_user("erin"), "Content-Type": "application/pdf"}
     assert client.post(url, content=b"%PDF-1.4 demo", headers=pdf).json()["files"][0]["name"] == "statement.pdf"
+    assert client.post(url.replace("statement", "выписка"), content=b"%PDF", headers=pdf).json()["files"][1]["name"] == "_______.pdf"
     assert client.post(url, content=b"x", headers={**as_user("erin"), "Content-Type": "text/html"}).status_code == 415
     assert client.post(url, content=b"x", headers={**as_user("mallory"), "Content-Type": "application/pdf"}).status_code == 404
     get = f"/api/cases/{case['id']}/files/0"
-    assert client.get(get, headers=as_user("agent4", "staff")).content == b"%PDF-1.4 demo"
+    assert client.get(get, headers=as_user("erin")).content == b"%PDF-1.4 demo"
     assert client.get(get, headers=as_user("mallory")).status_code == 404
+    assert client.get(get, headers=as_user("agent4", "staff")).status_code == 404
+    assert client.patch(f"/api/cases/{case['id']}", json={"note": "x"}, headers=as_user("agent4", "staff")).status_code == 404
 
 
 def test_customer_writes_on_own_open_case_and_staff_can_assign_it():
@@ -106,6 +110,8 @@ def test_customer_writes_on_own_open_case_and_staff_can_assign_it():
     seen = client.post(url, json={"text": "Receipt attached, card 4111111111111111"}, headers=as_user("fay")).json()
     assert seen["timeline"][-1] == {**seen["timeline"][-1], "kind": "customer", "text": "Receipt attached, card [REDACTED]"}
     assert client.post(url, json={"text": "hi"}, headers=as_user("mallory")).status_code == 404
-    staff = as_user("agent5", "staff")
-    assert client.patch(f"/api/cases/{case['id']}", json={"assign": "me", "status": "resolved"}, headers=staff).json()["assignee"] == "agent5"
+    staff = as_user("fay", "staff")  # demo staff can work their own case
+    assert client.patch(f"/api/cases/{case['id']}", json={"assign": "me", "status": "resolved"}, headers=staff).json()["assignee"] == "fay"
     assert client.post(url, json={"text": "still wrong"}, headers=as_user("fay")).status_code == 409
+    pdf = {**as_user("fay"), "Content-Type": "application/pdf"}
+    assert client.post(f"/api/my/cases/{case['id']}/files?name=a.pdf", content=b"%PDF", headers=pdf).status_code == 409

@@ -1,4 +1,4 @@
-# Email the compliance team for every high-urgency complaint (optional: set alert_email).
+# Email the compliance team when a high-urgency complaint is filed, at most once per 5 minutes (optional: set alert_email).
 
 variable "alert_email" {
   type    = string
