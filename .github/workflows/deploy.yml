@@ -46,4 +46,4 @@ jobs:
       - name: Smoke test
         run: |
           URL=$(gcloud run services describe $SERVICE --region $REGION --format 'value(status.url)')
-          curl -fsS $URL/health | tee /dev/stderr | grep -q '"backend":"gcp"'
+          curl -fsS --retry 5 --retry-all-errors $URL/health | tee /dev/stderr | grep -q '"backend":"gcp"'

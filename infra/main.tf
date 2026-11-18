@@ -22,7 +22,7 @@ provider "google" {
 
 resource "google_project_service" "apis" {
   for_each = toset([
-    "aiplatform", "apikeys", "artifactregistry", "bigquery", "cloudbuild", "cloudfunctions", "dialogflow", "eventarc",
+    "aiplatform", "apikeys", "artifactregistry", "bigquery", "cloudbuild", "cloudfunctions", "cloudresourcemanager", "iam", "dialogflow", "eventarc",
     "firestore", "iamcredentials", "identitytoolkit", "logging", "monitoring", "pubsub", "run", "serviceusage", "storage", "sts",
   ])
   service            = "${each.key}.googleapis.com"

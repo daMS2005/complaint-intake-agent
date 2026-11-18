@@ -1,7 +1,7 @@
 # Northwind Resolve
 
-**Live: https://complaint-agent-1045201542246.us-central1.run.app**
-([status page](https://complaint-agent-1045201542246.us-central1.run.app/status): which stack it's running on, and why)
+**Live: https://complaint-agent-938446768670.us-central1.run.app**
+([status page](https://complaint-agent-938446768670.us-central1.run.app/status): which stack it's running on, and why)
 
 Northwind Resolve is the complaint-handling system of a retail bank. When a customer has a problem with
 their money, they tell an AI assistant. The assistant turns it into a case with the right urgency and the
@@ -68,7 +68,7 @@ Vertex AI API is enabled for its project. If it is, every part of the app runs o
 If not, every part runs on open-source software on the same machine (red), with no cloud account or
 billing. In between, if Vertex AI isn't available but an `OPENAI_API_KEY` is set and accepted, only the
 model and embeddings use OpenAI and everything else stays local (amber). This is useful when the machine
-is too small for a local model. The live [status page](https://complaint-agent-1045201542246.us-central1.run.app/status) shows
+is too small for a local model. The live [status page](https://complaint-agent-938446768670.us-central1.run.app/status) shows
 what the check found.
 
 ```mermaid
