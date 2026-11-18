@@ -12,8 +12,10 @@ import math
 import pathlib
 
 from google.adk.agents import Agent
+from google.adk.models import Gemini
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.tools import ToolContext
+from google.genai import types
 
 from . import backend, cases
 
@@ -25,7 +27,9 @@ HERE = pathlib.Path(__file__).parent
 
 
 def _model():
-    return backend.MODEL if backend.GCP else LiteLlm(model=f"ollama_chat/{backend.MODEL}")
+    if backend.GCP:  # retry Vertex AI's 429s (shared capacity) with backoff instead of failing the turn
+        return Gemini(model=backend.MODEL, retry_options=types.HttpRetryOptions(attempts=5, initial_delay=1, max_delay=16))
+    return LiteLlm(model=f"ollama_chat/{backend.MODEL}")
 
 
 # ---- customer tools ----
