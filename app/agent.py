@@ -1,19 +1,21 @@
 """ADK agents. The same agents run on Gemini (Vertex AI) or a local Ollama model.
 
-customer_agent  coordinator for customers; delegates to intake, policy and status sub-agents
-analyst_agent   internal agent for compliance/ops staff over the case store and CFPB data
+customer_agent  for signed-in customers; delegates to intake, policy and my-cases sub-agents
+analyst_agent   for staff; answers questions over all cases and CFPB industry data
+
+Customer tools read the signed-in user from tool_context.user_id, so an agent can only file and read
+cases for the person it is talking to.
 """
 import collections
 import datetime
-import json
 import math
 import pathlib
-import uuid
 
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools import ToolContext
 
-from . import backend
+from . import backend, cases
 
 PRODUCTS = [
     "Checking or savings account", "Credit card", "Credit reporting", "Debt collection",
@@ -22,26 +24,14 @@ PRODUCTS = [
 HERE = pathlib.Path(__file__).parent
 
 
-def _now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
-
-
 def _model():
     return backend.MODEL if backend.GCP else LiteLlm(model=f"ollama_chat/{backend.MODEL}")
 
 
-def seed_if_empty() -> None:
-    """Loads demo cases so the Case Desk and Analyst have data on first run."""
-    if backend.list_cases(limit=1):
-        return
-    for case in json.loads((HERE / "data" / "seed_cases.json").read_text()):
-        created = _now() - datetime.timedelta(days=case.pop("days_ago"), hours=len(case["summary"]) % 9)
-        backend.save_case({**case, "created": created.isoformat(timespec="seconds")})
-
-
 # ---- customer tools ----
 
-def file_complaint(product: str, issue: str, summary: str, urgency: str, regulations: list[str]) -> dict:
+def file_complaint(product: str, issue: str, summary: str, urgency: str, regulations: list[str],
+                   tool_context: ToolContext) -> dict:
     """Files the customer's complaint as a case and escalates it to the compliance team if urgent.
 
     Args:
@@ -52,21 +42,13 @@ def file_complaint(product: str, issue: str, summary: str, urgency: str, regulat
             imminent foreclosure or repossession), "medium" if there is a financial impact, else "low".
         regulations: US consumer-finance rules that may apply, e.g. "Reg E", "FCRA", "FDCPA", "TILA", "RESPA".
     """
-    case = {
-        "id": f"C-{uuid.uuid4().hex[:8].upper()}",
-        "created": _now().isoformat(timespec="seconds"),
-        "product": product, "issue": issue, "summary": summary,
-        "urgency": urgency.lower(), "regulations": regulations, "status": "new", "notes": [],
-    }
-    backend.save_case(case)
-    escalated = case["urgency"] == "high"
-    backend.publish("escalated" if escalated else "filed", case)
-    return {"case_id": case["id"], "escalated": escalated}
+    case = cases.open_case(tool_context.user_id, product, issue, summary, urgency, regulations)
+    return {"case_id": case["id"], "escalated": case["urgency"] == "high", "response_due": case["due"][:10]}
 
 
-def get_case(case_id: str) -> dict:
-    """Looks up a case by its id, e.g. "C-1A2B3C4D", and returns its status and staff notes."""
-    return backend.load_case(case_id.strip().upper()) or {"error": f"No case {case_id}"}
+def my_cases(tool_context: ToolContext) -> dict:
+    """Returns the signed-in customer's cases with status, response deadline and replies from bank staff."""
+    return {"cases": [cases.customer_view(c) for c in cases.cases_of(tool_context.user_id)]}
 
 
 _policy_index = None
@@ -94,26 +76,29 @@ def search_policies(question: str) -> dict:
 # ---- analyst tools ----
 
 def case_breakdown(field: str, days: int = 30) -> dict:
-    """Counts Northwind cases filed in the last `days` days, grouped by a field.
+    """Counts Northwind cases opened in the last `days` days, grouped by a field.
 
     Args:
         field: One of "product", "issue", "urgency", "status", "regulations".
         days: Look-back window in days.
     """
-    since = (_now() - datetime.timedelta(days=days)).isoformat()
-    cases = [c for c in backend.list_cases() if c["created"] >= since]
-    values = [v for c in cases for v in (c.get(field) if isinstance(c.get(field), list) else [c.get(field)])]
-    return {"cases": len(cases), "days": days, "counts": dict(collections.Counter(values).most_common())}
+    since = cases.iso(cases.now() - datetime.timedelta(days=days))
+    recent = [c for c in cases.all_cases() if c["created"] >= since]
+    values = [v for c in recent for v in (c.get(field) if isinstance(c.get(field), list) else [c.get(field)])]
+    return {"cases": len(recent), "days": days, "counts": dict(collections.Counter(values).most_common())}
 
 
-def find_cases(urgency: str = "", status: str = "", product: str = "") -> dict:
-    """Lists up to 15 Northwind cases, newest first, filtered by urgency ("high", "medium", "low"),
-    status ("new", "in_review", "resolved") and/or a product keyword. Empty filters match everything."""
-    hits = [c for c in backend.list_cases()
+def find_cases(urgency: str = "", status: str = "", product: str = "", overdue_only: bool = False) -> dict:
+    """Lists up to 15 Northwind cases, newest first. Filters: urgency ("high", "medium", "low"), status ("new",
+    "in_review", "resolved"), a product keyword, and overdue_only (open cases past their response deadline).
+    Empty filters match everything."""
+    t = cases.iso(cases.now())
+    hits = [c for c in cases.all_cases()
             if (not urgency or c["urgency"] == urgency) and (not status or c["status"] == status)
-            and product.lower() in c["product"].lower()]
-    return {"total": len(hits), "cases": [
-        {k: c[k] for k in ("id", "created", "product", "issue", "urgency", "status", "summary")} for c in hits[:15]]}
+            and product.lower() in c["product"].lower()
+            and (not overdue_only or (c["status"] != "resolved" and c["due"] < t))]
+    keys = ("id", "created", "due", "product", "issue", "urgency", "status", "summary")
+    return {"now": t, "total": len(hits), "cases": [{k: c[k] for k in keys} for c in hits[:15]]}
 
 
 def industry_breakdown(product_keyword: str, field: str) -> dict:
@@ -134,8 +119,8 @@ intake_agent = Agent(
 - Ask at most one round of short follow-up questions. On the customer's next message, call file_complaint
   with what you have; never ask for the same detail twice.
 - File each problem once. If you already filed it in this conversation, refer to that case id instead.
-- After filing, give the case id. If escalated, say a specialist will contact them within one business day;
-  otherwise within 15 days.""",
+- After filing, give the case id and say they can follow it under My cases. If escalated, say a specialist
+  will contact them within one business day; otherwise give the response date.""",
     tools=[file_complaint],
 )
 
@@ -153,13 +138,14 @@ If the customer wants to report a problem, transfer to intake_agent.""",
 status_agent = Agent(
     name="status_agent",
     model=_model(),
-    description="Reports the status of an existing case when the customer gives a case id.",
-    instruction="""Look up the case with get_case and summarize its status and any staff notes for the customer.
-If they have no case id, ask for it (format C-XXXXXXXX).""",
-    tools=[get_case],
+    description="Tells the customer where their existing cases stand.",
+    instruction="""Use my_cases and summarize the status, the response date and the latest reply from the bank for
+the case the customer asks about (or all open ones).""",
+    tools=[my_cases],
 )
 
 COMMON = """
+Today's date is {today}.
 Never ask for or repeat full account numbers, card numbers, SSNs or passwords.
 Keep every reply under 80 words, in plain text without markdown."""
 
@@ -174,7 +160,7 @@ Route every request to the right specialist:
 - something that happened to the customer (a charge they did not make, a wrong fee, collection calls,
   a notice, a frozen account): intake_agent, even if they also ask a question
 - a general question about fees, rights, timelines or policies, with nothing to report: policy_agent
-- the status of an existing case: status_agent
+- the status of their existing cases: status_agent
 Transfer right away without replying yourself. Only if the customer has not said what they need yet,
 greet them in one sentence and ask.""" + COMMON,
     sub_agents=[intake_agent, policy_agent, status_agent],
@@ -183,8 +169,9 @@ greet them in one sentence and ask.""" + COMMON,
 analyst_agent = Agent(
     name="ops_analyst",
     model=_model(),
-    instruction="""You are an internal analyst for Northwind Bank's compliance and operations teams.
-Answer questions about Northwind's complaint cases with case_breakdown and find_cases, and compare them with
+    instruction="""You are an internal analyst for Northwind Bank's compliance and operations teams. Today's date is {today}.
+Answer questions about Northwind's complaint cases with case_breakdown and find_cases (which knows each case's
+response deadline), and compare them with
 the wider industry using industry_breakdown (public CFPB complaint data). Always use the tools rather than
 guessing, give concrete numbers, name the data source and time window, and keep answers short. Point out
 anything that looks like a compliance risk (for example many high-urgency Reg E cases still marked new).

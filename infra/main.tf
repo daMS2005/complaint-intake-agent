@@ -22,8 +22,8 @@ provider "google" {
 
 resource "google_project_service" "apis" {
   for_each = toset([
-    "aiplatform", "artifactregistry", "bigquery", "cloudbuild", "cloudfunctions", "dialogflow", "eventarc",
-    "firestore", "iamcredentials", "logging", "monitoring", "pubsub", "run", "serviceusage", "storage", "sts",
+    "aiplatform", "apikeys", "artifactregistry", "bigquery", "cloudbuild", "cloudfunctions", "dialogflow", "eventarc",
+    "firestore", "iamcredentials", "identitytoolkit", "logging", "monitoring", "pubsub", "run", "serviceusage", "storage", "sts",
   ])
   service            = "${each.key}.googleapis.com"
   disable_on_destroy = false
@@ -95,6 +95,10 @@ resource "google_cloud_run_v2_service" "app" {
       env {
         name  = "EVENTS_TOPIC"
         value = google_pubsub_topic.events.id
+      }
+      env {
+        name  = "WEB_API_KEY" # public browser key, restricted to the sign-in APIs
+        value = google_apikeys_key.web.key_string
       }
     }
   }

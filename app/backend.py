@@ -1,7 +1,8 @@
 """Runtime check: route through GCP when the Vertex AI API is available, else a local open-source stack.
 
 Each function below has a GCP branch and a local branch:
-  cases       Firestore            | SQLite
+  sign-in     Identity Platform    | developer tokens ("dev:<uid>")
+  documents   Firestore            | SQLite
   events      Pub/Sub              | data/events.jsonl
   embeddings  Vertex AI            | EmbeddingGemma on Ollama
   industry    BigQuery CFPB data   | bundled CFPB sample (app/data/cfpb_sample.csv.gz)
@@ -18,7 +19,8 @@ import sqlite3
 
 import google.auth
 import httpx
-from google.auth.transport.requests import AuthorizedSession
+from google.auth.transport.requests import AuthorizedSession, Request
+from google.oauth2 import id_token
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ def vertex_enabled() -> tuple[bool, str | None]:
 GCP, PROJECT = vertex_enabled()
 FIRESTORE_DB = os.getenv("FIRESTORE_DATABASE") if GCP else None
 TOPIC = os.getenv("EVENTS_TOPIC") if GCP else None  # projects/<p>/topics/<t>
+WEB_API_KEY = os.getenv("WEB_API_KEY") if GCP else None  # browser key for Identity Platform sign-in
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", "data"))
 CFPB_SAMPLE = pathlib.Path(__file__).parent / "data" / "cfpb_sample.csv.gz"
 
@@ -58,41 +61,57 @@ OLLAMA = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
 log.info("backend=%s model=%s firestore=%s topic=%s", "gcp" if GCP else "local", MODEL, FIRESTORE_DB, TOPIC)
 
 
+def verify_token(token: str) -> str | None:
+    """Returns the signed-in user's id, or None. Identity Platform ID tokens on GCP, "dev:<uid>" locally."""
+    if WEB_API_KEY:
+        try:
+            return id_token.verify_firebase_token(token, Request(), audience=PROJECT)["sub"]
+        except Exception:
+            return None
+    return token.removeprefix("dev:") if token.startswith("dev:") and len(token) < 80 else None
+
+
 @functools.cache
-def _cases():
+def _db():
     if FIRESTORE_DB:
         from google.cloud import firestore
-        return firestore.Client(project=PROJECT, database=FIRESTORE_DB).collection("cases")
+        return firestore.Client(project=PROJECT, database=FIRESTORE_DB)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DATA_DIR / "cases.db", check_same_thread=False)
-    con.execute("CREATE TABLE IF NOT EXISTS cases (id TEXT PRIMARY KEY, created TEXT, data TEXT)")
+    return sqlite3.connect(DATA_DIR / "northwind.db", check_same_thread=False)
+
+
+def _table(name: str):
+    con = _db()
+    con.execute(f"CREATE TABLE IF NOT EXISTS {name} (id TEXT PRIMARY KEY, data TEXT)")
     return con
 
 
-def save_case(case: dict) -> None:
+def put(collection: str, doc_id: str, doc: dict) -> None:
     if FIRESTORE_DB:
-        _cases().document(case["id"]).set(case)
+        _db().collection(collection).document(doc_id).set(doc)
     else:
-        _cases().execute("INSERT OR REPLACE INTO cases VALUES (?, ?, ?)", (case["id"], case["created"], json.dumps(case)))
-        _cases().commit()
+        _table(collection).execute(f"INSERT OR REPLACE INTO {collection} VALUES (?, ?)", (doc_id, json.dumps(doc)))
+        _db().commit()
 
 
-def load_case(case_id: str) -> dict | None:
+def get(collection: str, doc_id: str) -> dict | None:
     if FIRESTORE_DB:
-        doc = _cases().document(case_id).get()
+        doc = _db().collection(collection).document(doc_id).get()
         return doc.to_dict() if doc.exists else None
-    row = _cases().execute("SELECT data FROM cases WHERE id = ?", (case_id,)).fetchone()
+    row = _table(collection).execute(f"SELECT data FROM {collection} WHERE id = ?", (doc_id,)).fetchone()
     return json.loads(row[0]) if row else None
 
 
-def list_cases(limit: int = 500) -> list[dict]:
-    """Newest first."""
+def find(collection: str, **equals) -> list[dict]:
+    """Documents whose fields equal the given values (all documents if none given)."""
     if FIRESTORE_DB:
-        from google.cloud import firestore
-        query = _cases().order_by("created", direction=firestore.Query.DESCENDING).limit(limit)
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        query = _db().collection(collection)
+        for field, value in equals.items():
+            query = query.where(filter=FieldFilter(field, "==", value))
         return [d.to_dict() for d in query.stream()]
-    rows = _cases().execute("SELECT data FROM cases ORDER BY created DESC LIMIT ?", (limit,))
-    return [json.loads(r[0]) for r in rows]
+    docs = [json.loads(r[0]) for r in _table(collection).execute(f"SELECT data FROM {collection}")]
+    return [d for d in docs if all(d.get(k) == v for k, v in equals.items())]
 
 
 @functools.cache
