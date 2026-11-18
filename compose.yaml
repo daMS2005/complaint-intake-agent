@@ -1,5 +1,6 @@
 # The local open-source stack in one command: `docker compose up`, then open http://localhost:8080.
 # No Google Cloud account, credentials or billing; the app's runtime check falls back to these services.
+# The default model needs about 4 GB of Docker memory; on smaller machines run LOCAL_MODEL=qwen3:1.7b docker compose up.
 services:
   ollama:
     image: ollama/ollama:0.40.16
@@ -11,8 +12,8 @@ services:
 
   models: # pulls the two open models once, then exits
     image: ollama/ollama:0.40.16
-    environment: [OLLAMA_HOST=ollama:11434]
-    entrypoint: ["sh", "-c", "ollama pull qwen3:4b-instruct && ollama pull embeddinggemma"]
+    environment: [OLLAMA_HOST=ollama:11434, "MODEL=${LOCAL_MODEL:-qwen3:4b-instruct}"]
+    entrypoint: ["sh", "-c", "ollama pull $$MODEL && ollama pull embeddinggemma"]
     depends_on:
       ollama: { condition: service_healthy }
 
@@ -21,6 +22,9 @@ services:
     ports: ["8080:8080"]
     environment:
       - FORCE_LOCAL=1
+      - LOCAL_MODEL=${LOCAL_MODEL:-qwen3:4b-instruct}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-} # optional, from .env: model and embeddings then use OpenAI
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5.4-mini}
       - OLLAMA_API_BASE=http://ollama:11434
       - DATA_DIR=/srv/data
     volumes: [data:/srv/data]

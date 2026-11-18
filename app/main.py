@@ -226,6 +226,7 @@ async def analyst_chat(body: ChatIn, user: dict = Depends(staff_user)) -> dict:
 def health() -> dict:
     return {
         "backend": "gcp" if backend.GCP else "local",
+        "llm": backend.LLM,
         "model": backend.MODEL,
         "embeddings": backend.EMBED_MODEL,
         "auth": "identity_platform" if backend.WEB_API_KEY else "dev",

@@ -29,7 +29,7 @@ HERE = pathlib.Path(__file__).parent
 def _model():
     if backend.GCP:  # retry Vertex AI's 429s (shared capacity) with backoff instead of failing the turn
         return Gemini(model=backend.MODEL, retry_options=types.HttpRetryOptions(attempts=5, initial_delay=1, max_delay=16))
-    return LiteLlm(model=f"ollama_chat/{backend.MODEL}")
+    return LiteLlm(model=f"openai/{backend.MODEL}" if backend.LLM == "openai" else f"ollama_chat/{backend.MODEL}")
 
 
 # ---- customer tools ----

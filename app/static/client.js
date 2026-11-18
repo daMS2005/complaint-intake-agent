@@ -110,7 +110,7 @@ export async function runtime() {
   const h = await (await fetch("/health")).json();
   const el = document.createElement("a");
   el.className = "runtime"; el.href = "/status";
-  el.textContent = h.backend === "gcp" ? "Running on Google Cloud" : "Running on the local stack";
+  el.textContent = h.backend === "gcp" ? "Running on Google Cloud" : h.llm === "openai" ? "Running locally with OpenAI" : "Running on the local stack";
   el.title = `Model: ${h.model}\nEmbeddings: ${h.embeddings}\nSign-in: ${h.auth}\nStorage: ${h.store}\nEvents: ${h.events}`;
   document.querySelector("header").append(el);
 }

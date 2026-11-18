@@ -3,3 +3,4 @@ data
 infra
 tests
 .git
+.env

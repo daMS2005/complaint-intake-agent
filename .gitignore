@@ -7,3 +7,4 @@ infra/*.tfstate*
 infra/*.tfvars
 infra/function.zip
 .pytest_cache/
+.env

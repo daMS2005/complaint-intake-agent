@@ -1,11 +1,12 @@
 """Runtime check: route through GCP when the Vertex AI API is available, else a local open-source stack.
+Without Vertex AI, a valid OPENAI_API_KEY swaps only the model and embeddings to OpenAI; the rest stays local.
 
 Each function below has a GCP branch and a local branch:
   sign-in     Identity Platform    | developer tokens ("dev:<uid>")
   documents   Firestore            | SQLite
   files       Cloud Storage        | data/files/
   events      Pub/Sub              | data/events.jsonl
-  embeddings  Vertex AI            | EmbeddingGemma on Ollama
+  embeddings  Vertex AI            | OpenAI if keyed, else EmbeddingGemma on Ollama
   industry    BigQuery CFPB data   | bundled CFPB sample (app/data/cfpb_sample.csv.gz)
 """
 import collections
@@ -61,18 +62,37 @@ EVIDENCE_BUCKET = os.getenv("EVIDENCE_BUCKET") if GCP else None  # customer docu
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", "data"))
 CFPB_SAMPLE = pathlib.Path(__file__).parent / "data" / "cfpb_sample.csv.gz"
 
+def openai_usable() -> bool:
+    """Second tier: an OpenAI key that the API accepts (checked once, with a free model-list call)."""
+    key = os.getenv("OPENAI_API_KEY")
+    if GCP or not key:
+        return False
+    try:
+        r = httpx.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {key}"}, timeout=5)
+        ok, detail = r.status_code == 200, "Accepted" if r.status_code == 200 else f"HTTP {r.status_code}"
+    except httpx.HTTPError as e:
+        ok, detail = False, type(e).__name__
+    CHECK["steps"].append({"name": "OpenAI API key", "ok": ok, "detail": detail})
+    return ok
+
+
+LLM = "vertex" if GCP else "openai" if openai_usable() else "ollama"
+
 if GCP:  # ADK reads these to send Gemini calls through Vertex AI
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
     os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT
     os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
     MODEL = os.getenv("VERTEX_MODEL", "gemini-3.5-flash")
     EMBED_MODEL = os.getenv("VERTEX_EMBED_MODEL", "gemini-embedding-001")
+elif LLM == "openai":
+    MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+    EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
 else:
     MODEL = os.getenv("LOCAL_MODEL", "qwen3:4b-instruct")
     EMBED_MODEL = os.getenv("LOCAL_EMBED_MODEL", "embeddinggemma")
 OLLAMA = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
 
-log.info("backend=%s model=%s firestore=%s topic=%s", "gcp" if GCP else "local", MODEL, FIRESTORE_DB, TOPIC)
+log.info("backend=%s llm=%s model=%s firestore=%s", "gcp" if GCP else "local", LLM, MODEL, FIRESTORE_DB)
 
 
 def verify_token(token: str) -> str | None:
@@ -170,6 +190,11 @@ def embed(texts: list[str]) -> list[list[float]]:
         from google import genai
         client = genai.Client(vertexai=True, project=PROJECT, location=os.getenv("EMBED_LOCATION", "us-central1"))
         return [client.models.embed_content(model=EMBED_MODEL, contents=t).embeddings[0].values for t in texts]
+    if LLM == "openai":
+        r = httpx.post("https://api.openai.com/v1/embeddings", json={"model": EMBED_MODEL, "input": texts}, timeout=60,
+                       headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"})
+        r.raise_for_status()
+        return [d["embedding"] for d in r.json()["data"]]
     r = httpx.post(f"{OLLAMA}/api/embed", json={"model": EMBED_MODEL, "input": texts}, timeout=120)
     r.raise_for_status()
     return r.json()["embeddings"]

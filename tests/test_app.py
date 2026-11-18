@@ -5,6 +5,7 @@ import tempfile
 from types import SimpleNamespace
 
 os.environ["FORCE_LOCAL"] = "1"
+os.environ.pop("OPENAI_API_KEY", None)  # tests never call a paid API
 os.environ["DATA_DIR"] = tempfile.mkdtemp()
 
 from fastapi.testclient import TestClient  # noqa: E402
